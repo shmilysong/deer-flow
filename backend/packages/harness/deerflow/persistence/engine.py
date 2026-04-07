@@ -81,46 +81,13 @@ async def init_engine(
         try:
             import asyncpg  # noqa: F401
         except ImportError:
-            raise ImportError(
-                "database.backend is set to 'postgres' but asyncpg is not installed.\n"
-                "Install it with:\n"
-                "    cd backend && uv sync --all-packages --extra postgres\n"
-                "On the next `make dev` the postgres extra is auto-detected from\n"
-                "config.yaml (database.backend: postgres) and reinstalled, so it\n"
-                "will not be wiped again. Set UV_EXTRAS=postgres in .env to opt in\n"
-                "explicitly. Or switch to backend: sqlite in config.yaml for\n"
-                "single-node deployment."
-            ) from None
+            raise ImportError("database.backend is set to 'postgres' but asyncpg is not installed.\nInstall it with:\n    uv sync --extra postgres\nOr switch to backend: sqlite in config.yaml for single-node deployment.") from None
 
     if backend == "sqlite":
         import os
 
-        from sqlalchemy import event
-
         os.makedirs(sqlite_dir or ".", exist_ok=True)
         _engine = create_async_engine(url, echo=echo, json_serializer=_json_serializer)
-
-        # Enable WAL on every new connection. SQLite PRAGMA settings are
-        # per-connection, so we wire the listener instead of running PRAGMA
-        # once at startup. WAL gives concurrent reads + writers without
-        # blocking and is the standard recommendation for any production
-        # SQLite deployment (TC-UPG-06 in AUTH_TEST_PLAN.md). The companion
-        # ``synchronous=NORMAL`` is the safe-and-fast pairing — fsync only
-        # at WAL checkpoint boundaries instead of every commit.
-        # Note: we do not set PRAGMA busy_timeout here — Python's sqlite3
-        # driver already defaults to a 5-second busy timeout (see the
-        # ``timeout`` kwarg of ``sqlite3.connect``), and aiosqlite /
-        # SQLAlchemy's aiosqlite dialect inherit that default.  Setting
-        # it again would be a no-op.
-        @event.listens_for(_engine.sync_engine, "connect")
-        def _enable_sqlite_wal(dbapi_conn, _record):  # noqa: ARG001 — SQLAlchemy contract
-            cursor = dbapi_conn.cursor()
-            try:
-                cursor.execute("PRAGMA journal_mode=WAL;")
-                cursor.execute("PRAGMA synchronous=NORMAL;")
-                cursor.execute("PRAGMA foreign_keys=ON;")
-            finally:
-                cursor.close()
     elif backend == "postgres":
         _engine = create_async_engine(
             url,

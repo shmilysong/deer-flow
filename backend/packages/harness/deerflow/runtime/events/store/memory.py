@@ -97,17 +97,9 @@ class MemoryRunEventStore(RunEventStore):
             filtered = [e for e in filtered if e["event_type"] in event_types]
         return filtered[:limit]
 
-    async def list_messages_by_run(self, thread_id, run_id, *, limit=50, before_seq=None, after_seq=None):
+    async def list_messages_by_run(self, thread_id, run_id):
         all_events = self._events.get(thread_id, [])
-        filtered = [e for e in all_events if e["run_id"] == run_id and e["category"] == "message"]
-        if before_seq is not None:
-            filtered = [e for e in filtered if e["seq"] < before_seq]
-        if after_seq is not None:
-            filtered = [e for e in filtered if e["seq"] > after_seq]
-        if after_seq is not None:
-            return filtered[:limit]
-        else:
-            return filtered[-limit:] if len(filtered) > limit else filtered
+        return [e for e in all_events if e["run_id"] == run_id and e["category"] == "message"]
 
     async def count_messages(self, thread_id):
         all_events = self._events.get(thread_id, [])

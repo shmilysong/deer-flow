@@ -13,39 +13,20 @@ matching the LangGraph Platform wire format expected by the
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from langgraph.checkpoint.base import empty_checkpoint
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from app.gateway.authz import require_permission
 from app.gateway.deps import get_checkpointer
 from app.gateway.utils import sanitize_log_param
 from deerflow.config.paths import Paths, get_paths
 from deerflow.runtime import serialize_channel_values
-from deerflow.runtime.user_context import get_effective_user_id
-from deerflow.utils.time import coerce_iso, now_iso
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/threads", tags=["threads"])
-
-
-# Metadata keys that the server controls; clients are not allowed to set
-# them. Pydantic ``@field_validator("metadata")`` strips them on every
-# inbound model below so a malicious client cannot reflect a forged
-# owner identity through the API surface. Defense-in-depth — the
-# row-level invariant is still ``threads_meta.user_id`` populated from
-# the auth contextvar; this list closes the metadata-blob echo gap.
-_SERVER_RESERVED_METADATA_KEYS: frozenset[str] = frozenset({"owner_id", "user_id"})
-
-
-def _strip_reserved_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
-    """Return ``metadata`` with server-controlled keys removed."""
-    if not metadata:
-        return metadata or {}
-    return {k: v for k, v in metadata.items() if k not in _SERVER_RESERVED_METADATA_KEYS}
 
 
 # ---------------------------------------------------------------------------
@@ -79,8 +60,6 @@ class ThreadCreateRequest(BaseModel):
     assistant_id: str | None = Field(default=None, description="Associate thread with an assistant")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Initial metadata")
 
-    _strip_reserved = field_validator("metadata")(classmethod(lambda cls, v: _strip_reserved_metadata(v)))
-
 
 class ThreadSearchRequest(BaseModel):
     """Request body for searching threads."""
@@ -89,28 +68,6 @@ class ThreadSearchRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=1000, description="Maximum results")
     offset: int = Field(default=0, ge=0, description="Pagination offset")
     status: str | None = Field(default=None, description="Filter by thread status")
-
-    @field_validator("metadata")
-    @classmethod
-    def _validate_metadata_filters(cls, v: dict[str, Any]) -> dict[str, Any]:
-        """Reject filter entries the SQL backend cannot compile.
-
-        Enforces consistent behaviour across SQL and memory backends.
-        See ``deerflow.persistence.json_compat`` for the shared validators.
-        """
-        if not v:
-            return v
-        from deerflow.persistence.json_compat import validate_metadata_filter_key, validate_metadata_filter_value
-
-        bad_entries: list[str] = []
-        for key, value in v.items():
-            if not validate_metadata_filter_key(key):
-                bad_entries.append(f"{key!r} (unsafe key)")
-            elif not validate_metadata_filter_value(value):
-                bad_entries.append(f"{key!r} (unsupported value type {type(value).__name__})")
-        if bad_entries:
-            raise ValueError(f"Invalid metadata filter entries: {', '.join(bad_entries)}")
-        return v
 
 
 class ThreadStateResponse(BaseModel):
@@ -130,8 +87,6 @@ class ThreadPatchRequest(BaseModel):
     """Request body for patching thread metadata."""
 
     metadata: dict[str, Any] = Field(default_factory=dict, description="Metadata to merge")
-
-    _strip_reserved = field_validator("metadata")(classmethod(lambda cls, v: _strip_reserved_metadata(v)))
 
 
 class ThreadStateUpdateRequest(BaseModel):
@@ -166,11 +121,11 @@ class ThreadHistoryRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _delete_thread_data(thread_id: str, paths: Paths | None = None, *, user_id: str | None = None) -> ThreadDeleteResponse:
+def _delete_thread_data(thread_id: str, paths: Paths | None = None) -> ThreadDeleteResponse:
     """Delete local persisted filesystem data for a thread."""
     path_manager = paths or get_paths()
     try:
-        path_manager.delete_thread_dir(thread_id, user_id=user_id)
+        path_manager.delete_thread_dir(thread_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except FileNotFoundError:
@@ -210,7 +165,6 @@ def _derive_thread_status(checkpoint_tuple) -> str:
 
 
 @router.delete("/{thread_id}", response_model=ThreadDeleteResponse)
-@require_permission("threads", "delete", owner_check=True, require_existing=True)
 async def delete_thread_data(thread_id: str, request: Request) -> ThreadDeleteResponse:
     """Delete local persisted filesystem data for a thread.
 
@@ -218,10 +172,10 @@ async def delete_thread_data(thread_id: str, request: Request) -> ThreadDeleteRe
     and removes the thread_meta row from the configured ThreadMetaStore
     (sqlite or memory).
     """
-    from app.gateway.deps import get_thread_store
+    from app.gateway.deps import get_thread_meta_repo
 
     # Clean local filesystem
-    response = _delete_thread_data(thread_id, user_id=get_effective_user_id())
+    response = _delete_thread_data(thread_id)
 
     # Remove checkpoints (best-effort)
     checkpointer = getattr(request.app.state, "checkpointer", None)
@@ -235,8 +189,8 @@ async def delete_thread_data(thread_id: str, request: Request) -> ThreadDeleteRe
     # Remove thread_meta row (best-effort) — required for sqlite backend
     # so the deleted thread no longer appears in /threads/search.
     try:
-        thread_store = get_thread_store(request)
-        await thread_store.delete(thread_id)
+        thread_meta_repo = get_thread_meta_repo(request)
+        await thread_meta_repo.delete(thread_id)
     except Exception:
         logger.debug("Could not delete thread_meta for %s (not critical)", sanitize_log_param(thread_id))
 
@@ -251,29 +205,27 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
     and an empty checkpoint (so state endpoints work immediately).
     Idempotent: returns the existing record when ``thread_id`` already exists.
     """
-    from app.gateway.deps import get_thread_store
+    from app.gateway.deps import get_thread_meta_repo
 
     checkpointer = get_checkpointer(request)
-    thread_store = get_thread_store(request)
+    thread_meta_repo = get_thread_meta_repo(request)
     thread_id = body.thread_id or str(uuid.uuid4())
-    now = now_iso()
-    # ``body.metadata`` is already stripped of server-reserved keys by
-    # ``ThreadCreateRequest._strip_reserved`` — see the model definition.
+    now = time.time()
 
     # Idempotency: return existing record when already present
-    existing_record = await thread_store.get(thread_id)
+    existing_record = await thread_meta_repo.get(thread_id)
     if existing_record is not None:
         return ThreadResponse(
             thread_id=thread_id,
             status=existing_record.get("status", "idle"),
-            created_at=coerce_iso(existing_record.get("created_at", "")),
-            updated_at=coerce_iso(existing_record.get("updated_at", "")),
+            created_at=str(existing_record.get("created_at", "")),
+            updated_at=str(existing_record.get("updated_at", "")),
             metadata=existing_record.get("metadata", {}),
         )
 
     # Write thread_meta so the thread appears in /threads/search immediately
     try:
-        await thread_store.create(
+        await thread_meta_repo.create(
             thread_id,
             assistant_id=getattr(body, "assistant_id", None),
             metadata=body.metadata,
@@ -285,6 +237,8 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
     # Write an empty checkpoint so state endpoints work immediately
     config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
     try:
+        from langgraph.checkpoint.base import empty_checkpoint
+
         ckpt_metadata = {
             "step": -1,
             "source": "input",
@@ -302,8 +256,8 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
     return ThreadResponse(
         thread_id=thread_id,
         status="idle",
-        created_at=now,
-        updated_at=now,
+        created_at=str(now),
+        updated_at=str(now),
         metadata=body.metadata,
     )
 
@@ -315,28 +269,21 @@ async def search_threads(body: ThreadSearchRequest, request: Request) -> list[Th
     Delegates to the configured ThreadMetaStore implementation
     (SQL-backed for sqlite/postgres, Store-backed for memory mode).
     """
-    from app.gateway.deps import get_thread_store
-    from deerflow.persistence.thread_meta import InvalidMetadataFilterError
+    from app.gateway.deps import get_thread_meta_repo
 
-    repo = get_thread_store(request)
-    try:
-        rows = await repo.search(
-            metadata=body.metadata or None,
-            status=body.status,
-            limit=body.limit,
-            offset=body.offset,
-        )
-    except InvalidMetadataFilterError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    repo = get_thread_meta_repo(request)
+    rows = await repo.search(
+        metadata=body.metadata or None,
+        status=body.status,
+        limit=body.limit,
+        offset=body.offset,
+    )
     return [
         ThreadResponse(
             thread_id=r["thread_id"],
             status=r.get("status", "idle"),
-            # ``coerce_iso`` heals legacy unix-second values that
-            # ``MemoryThreadMetaStore`` historically wrote with ``time.time()``;
-            # SQL-backed rows already arrive as ISO strings and pass through.
-            created_at=coerce_iso(r.get("created_at", "")),
-            updated_at=coerce_iso(r.get("updated_at", "")),
+            created_at=r.get("created_at", ""),
+            updated_at=r.get("updated_at", ""),
             metadata=r.get("metadata", {}),
             values={"title": r["display_name"]} if r.get("display_name") else {},
             interrupts={},
@@ -346,36 +293,33 @@ async def search_threads(body: ThreadSearchRequest, request: Request) -> list[Th
 
 
 @router.patch("/{thread_id}", response_model=ThreadResponse)
-@require_permission("threads", "write", owner_check=True, require_existing=True)
 async def patch_thread(thread_id: str, body: ThreadPatchRequest, request: Request) -> ThreadResponse:
     """Merge metadata into a thread record."""
-    from app.gateway.deps import get_thread_store
+    from app.gateway.deps import get_thread_meta_repo
 
-    thread_store = get_thread_store(request)
-    record = await thread_store.get(thread_id)
+    thread_meta_repo = get_thread_meta_repo(request)
+    record = await thread_meta_repo.get(thread_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
 
-    # ``body.metadata`` already stripped by ``ThreadPatchRequest._strip_reserved``.
     try:
-        await thread_store.update_metadata(thread_id, body.metadata)
+        await thread_meta_repo.update_metadata(thread_id, body.metadata)
     except Exception:
         logger.exception("Failed to patch thread %s", sanitize_log_param(thread_id))
         raise HTTPException(status_code=500, detail="Failed to update thread")
 
     # Re-read to get the merged metadata + refreshed updated_at
-    record = await thread_store.get(thread_id) or record
+    record = await thread_meta_repo.get(thread_id) or record
     return ThreadResponse(
         thread_id=thread_id,
         status=record.get("status", "idle"),
-        created_at=coerce_iso(record.get("created_at", "")),
-        updated_at=coerce_iso(record.get("updated_at", "")),
+        created_at=str(record.get("created_at", "")),
+        updated_at=str(record.get("updated_at", "")),
         metadata=record.get("metadata", {}),
     )
 
 
 @router.get("/{thread_id}", response_model=ThreadResponse)
-@require_permission("threads", "read", owner_check=True)
 async def get_thread(thread_id: str, request: Request) -> ThreadResponse:
     """Get thread info.
 
@@ -383,12 +327,12 @@ async def get_thread(thread_id: str, request: Request) -> ThreadResponse:
     execution status from the checkpointer.  Falls back to the checkpointer
     alone for threads that pre-date ThreadMetaStore adoption (backward compat).
     """
-    from app.gateway.deps import get_thread_store
+    from app.gateway.deps import get_thread_meta_repo
 
-    thread_store = get_thread_store(request)
+    thread_meta_repo = get_thread_meta_repo(request)
     checkpointer = get_checkpointer(request)
 
-    record: dict | None = await thread_store.get(thread_id)
+    record: dict | None = await thread_meta_repo.get(thread_id)
 
     # Derive accurate status from the checkpointer
     config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
@@ -409,8 +353,8 @@ async def get_thread(thread_id: str, request: Request) -> ThreadResponse:
         record = {
             "thread_id": thread_id,
             "status": "idle",
-            "created_at": coerce_iso(ckpt_meta.get("created_at", "")),
-            "updated_at": coerce_iso(ckpt_meta.get("updated_at", ckpt_meta.get("created_at", ""))),
+            "created_at": ckpt_meta.get("created_at", ""),
+            "updated_at": ckpt_meta.get("updated_at", ckpt_meta.get("created_at", "")),
             "metadata": {k: v for k, v in ckpt_meta.items() if k not in ("created_at", "updated_at", "step", "source", "writes", "parents")},
         }
 
@@ -424,16 +368,14 @@ async def get_thread(thread_id: str, request: Request) -> ThreadResponse:
     return ThreadResponse(
         thread_id=thread_id,
         status=status,
-        created_at=coerce_iso(record.get("created_at", "")),
-        updated_at=coerce_iso(record.get("updated_at", "")),
+        created_at=str(record.get("created_at", "")),
+        updated_at=str(record.get("updated_at", "")),
         metadata=record.get("metadata", {}),
         values=serialize_channel_values(channel_values),
     )
 
 
-# ---------------------------------------------------------------------------
 @router.get("/{thread_id}/state", response_model=ThreadStateResponse)
-@require_permission("threads", "read", owner_check=True)
 async def get_thread_state(thread_id: str, request: Request) -> ThreadStateResponse:
     """Get the latest state snapshot for a thread.
 
@@ -470,22 +412,19 @@ async def get_thread_state(thread_id: str, request: Request) -> ThreadStateRespo
     next_tasks = [t.name for t in tasks_raw if hasattr(t, "name")]
     tasks = [{"id": getattr(t, "id", ""), "name": getattr(t, "name", "")} for t in tasks_raw]
 
-    values = serialize_channel_values(channel_values)
-
     return ThreadStateResponse(
-        values=values,
+        values=serialize_channel_values(channel_values),
         next=next_tasks,
         metadata=metadata,
-        checkpoint={"id": checkpoint_id, "ts": coerce_iso(metadata.get("created_at", ""))},
+        checkpoint={"id": checkpoint_id, "ts": str(metadata.get("created_at", ""))},
         checkpoint_id=checkpoint_id,
         parent_checkpoint_id=parent_checkpoint_id,
-        created_at=coerce_iso(metadata.get("created_at", "")),
+        created_at=str(metadata.get("created_at", "")),
         tasks=tasks,
     )
 
 
 @router.post("/{thread_id}/state", response_model=ThreadStateResponse)
-@require_permission("threads", "write", owner_check=True, require_existing=True)
 async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, request: Request) -> ThreadStateResponse:
     """Update thread state (e.g. for human-in-the-loop resume or title rename).
 
@@ -494,10 +433,10 @@ async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, re
     ThreadMetaStore abstraction so that ``/threads/search`` reflects the
     change immediately in both sqlite and memory backends.
     """
-    from app.gateway.deps import get_thread_store
+    from app.gateway.deps import get_thread_meta_repo
 
     checkpointer = get_checkpointer(request)
-    thread_store = get_thread_store(request)
+    thread_meta_repo = get_thread_meta_repo(request)
 
     # checkpoint_ns must be present in the config for aput — default to ""
     # (the root graph namespace).  checkpoint_id is optional; omitting it
@@ -529,7 +468,7 @@ async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, re
         channel_values.update(body.values)
 
     checkpoint["channel_values"] = channel_values
-    metadata["updated_at"] = now_iso()
+    metadata["updated_at"] = time.time()
 
     if body.as_node:
         metadata["source"] = "update"
@@ -561,7 +500,7 @@ async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, re
         new_title = body.values["title"]
         if new_title:  # Skip empty strings and None
             try:
-                await thread_store.update_display_name(thread_id, new_title)
+                await thread_meta_repo.update_display_name(thread_id, new_title)
             except Exception:
                 logger.debug("Failed to sync title to thread_meta for %s (non-fatal)", sanitize_log_param(thread_id))
 
@@ -570,12 +509,11 @@ async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, re
         next=[],
         metadata=metadata,
         checkpoint_id=new_checkpoint_id,
-        created_at=coerce_iso(metadata.get("created_at", "")),
+        created_at=str(metadata.get("created_at", "")),
     )
 
 
 @router.post("/{thread_id}/history", response_model=list[HistoryEntry])
-@require_permission("threads", "read", owner_check=True)
 async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request: Request) -> list[HistoryEntry]:
     """Get checkpoint history for a thread.
 
@@ -614,7 +552,7 @@ async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request
             if thread_data := channel_values.get("thread_data"):
                 values["thread_data"] = thread_data
 
-            # Attach messages only to the latest checkpoint entry.
+            # Attach messages from checkpointer only for the latest checkpoint
             if is_latest_checkpoint:
                 messages = channel_values.get("messages")
                 if messages:
@@ -637,7 +575,7 @@ async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request
                     parent_checkpoint_id=parent_id,
                     metadata=user_meta,
                     values=values,
-                    created_at=coerce_iso(metadata.get("created_at", "")),
+                    created_at=str(metadata.get("created_at", "")),
                     next=next_tasks,
                 )
             )

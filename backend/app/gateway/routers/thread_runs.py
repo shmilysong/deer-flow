@@ -19,10 +19,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.gateway.authz import require_permission
-from app.gateway.deps import get_checkpointer, get_current_user, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge
-from app.gateway.services import sse_consumer, start_run, wait_for_run_completion
-from deerflow.runtime import RunRecord, RunStatus, serialize_channel_values
+from app.gateway.deps import get_checkpointer, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge
+from app.gateway.services import sse_consumer, start_run
+from deerflow.runtime import RunRecord, serialize_channel_values
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/threads", tags=["runs"])
@@ -54,6 +53,7 @@ class RunCreateRequest(BaseModel):
     after_seconds: float | None = Field(default=None, description="Delayed execution")
     if_not_exists: Literal["reject", "create"] = Field(default="create", description="Thread creation policy")
     feedback_keys: list[str] | None = Field(default=None, description="LangSmith feedback keys")
+    follow_up_to_run_id: str | None = Field(default=None, description="Run ID this message follows up on. Auto-detected from latest successful run if not provided.")
 
 
 class RunResponse(BaseModel):
@@ -66,46 +66,11 @@ class RunResponse(BaseModel):
     multitask_strategy: str = "reject"
     created_at: str = ""
     updated_at: str = ""
-    total_input_tokens: int = 0
-    total_output_tokens: int = 0
-    total_tokens: int = 0
-    llm_call_count: int = 0
-    lead_agent_tokens: int = 0
-    subagent_tokens: int = 0
-    middleware_tokens: int = 0
-    message_count: int = 0
-
-
-class ThreadTokenUsageModelBreakdown(BaseModel):
-    tokens: int = 0
-    runs: int = 0
-
-
-class ThreadTokenUsageCallerBreakdown(BaseModel):
-    lead_agent: int = 0
-    subagent: int = 0
-    middleware: int = 0
-
-
-class ThreadTokenUsageResponse(BaseModel):
-    thread_id: str
-    total_tokens: int = 0
-    total_input_tokens: int = 0
-    total_output_tokens: int = 0
-    total_runs: int = 0
-    by_model: dict[str, ThreadTokenUsageModelBreakdown] = Field(default_factory=dict)
-    by_caller: ThreadTokenUsageCallerBreakdown = Field(default_factory=ThreadTokenUsageCallerBreakdown)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _cancel_conflict_detail(run_id: str, record: RunRecord) -> str:
-    if record.status in (RunStatus.pending, RunStatus.running):
-        return f"Run {run_id} is not active on this worker and cannot be cancelled"
-    return f"Run {run_id} is not cancellable (status: {record.status.value})"
 
 
 def _record_to_response(record: RunRecord) -> RunResponse:
@@ -119,14 +84,6 @@ def _record_to_response(record: RunRecord) -> RunResponse:
         multitask_strategy=record.multitask_strategy,
         created_at=record.created_at,
         updated_at=record.updated_at,
-        total_input_tokens=record.total_input_tokens,
-        total_output_tokens=record.total_output_tokens,
-        total_tokens=record.total_tokens,
-        llm_call_count=record.llm_call_count,
-        lead_agent_tokens=record.lead_agent_tokens,
-        subagent_tokens=record.subagent_tokens,
-        middleware_tokens=record.middleware_tokens,
-        message_count=record.message_count,
     )
 
 
@@ -136,7 +93,6 @@ def _record_to_response(record: RunRecord) -> RunResponse:
 
 
 @router.post("/{thread_id}/runs", response_model=RunResponse)
-@require_permission("runs", "create", owner_check=True, require_existing=True)
 async def create_run(thread_id: str, body: RunCreateRequest, request: Request) -> RunResponse:
     """Create a background run (returns immediately)."""
     record = await start_run(body, thread_id, request)
@@ -144,7 +100,6 @@ async def create_run(thread_id: str, body: RunCreateRequest, request: Request) -
 
 
 @router.post("/{thread_id}/runs/stream")
-@require_permission("runs", "create", owner_check=True, require_existing=True)
 async def stream_run(thread_id: str, body: RunCreateRequest, request: Request) -> StreamingResponse:
     """Create a run and stream events via SSE.
 
@@ -172,56 +127,49 @@ async def stream_run(thread_id: str, body: RunCreateRequest, request: Request) -
 
 
 @router.post("/{thread_id}/runs/wait", response_model=dict)
-@require_permission("runs", "create", owner_check=True, require_existing=True)
 async def wait_run(thread_id: str, body: RunCreateRequest, request: Request) -> dict:
     """Create a run and block until it completes, returning the final state."""
-    bridge = get_stream_bridge(request)
-    run_mgr = get_run_manager(request)
     record = await start_run(body, thread_id, request)
 
-    completed = True
     if record.task is not None:
-        completed = await wait_for_run_completion(bridge, record, request, run_mgr)
-
-    if completed:
-        checkpointer = get_checkpointer(request)
-        config = {"configurable": {"thread_id": thread_id}}
         try:
-            checkpoint_tuple = await checkpointer.aget_tuple(config)
-            if checkpoint_tuple is not None:
-                checkpoint = getattr(checkpoint_tuple, "checkpoint", {}) or {}
-                channel_values = checkpoint.get("channel_values", {})
-                return serialize_channel_values(channel_values)
-        except Exception:
-            logger.exception("Failed to fetch final state for run %s", record.run_id)
+            await record.task
+        except asyncio.CancelledError:
+            pass
+
+    checkpointer = get_checkpointer(request)
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        checkpoint_tuple = await checkpointer.aget_tuple(config)
+        if checkpoint_tuple is not None:
+            checkpoint = getattr(checkpoint_tuple, "checkpoint", {}) or {}
+            channel_values = checkpoint.get("channel_values", {})
+            return serialize_channel_values(channel_values)
+    except Exception:
+        logger.exception("Failed to fetch final state for run %s", record.run_id)
 
     return {"status": record.status.value, "error": record.error}
 
 
 @router.get("/{thread_id}/runs", response_model=list[RunResponse])
-@require_permission("runs", "read", owner_check=True)
 async def list_runs(thread_id: str, request: Request) -> list[RunResponse]:
     """List all runs for a thread."""
     run_mgr = get_run_manager(request)
-    user_id = await get_current_user(request)
-    records = await run_mgr.list_by_thread(thread_id, user_id=user_id)
+    records = await run_mgr.list_by_thread(thread_id)
     return [_record_to_response(r) for r in records]
 
 
 @router.get("/{thread_id}/runs/{run_id}", response_model=RunResponse)
-@require_permission("runs", "read", owner_check=True)
 async def get_run(thread_id: str, run_id: str, request: Request) -> RunResponse:
     """Get details of a specific run."""
     run_mgr = get_run_manager(request)
-    user_id = await get_current_user(request)
-    record = await run_mgr.get(run_id, user_id=user_id)
+    record = run_mgr.get(run_id)
     if record is None or record.thread_id != thread_id:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     return _record_to_response(record)
 
 
 @router.post("/{thread_id}/runs/{run_id}/cancel")
-@require_permission("runs", "cancel", owner_check=True, require_existing=True)
 async def cancel_run(
     thread_id: str,
     run_id: str,
@@ -237,13 +185,16 @@ async def cancel_run(
     - wait=false: Return immediately with 202
     """
     run_mgr = get_run_manager(request)
-    record = await run_mgr.get(run_id)
+    record = run_mgr.get(run_id)
     if record is None or record.thread_id != thread_id:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
     cancelled = await run_mgr.cancel(run_id, action=action)
     if not cancelled:
-        raise HTTPException(status_code=409, detail=_cancel_conflict_detail(run_id, record))
+        raise HTTPException(
+            status_code=409,
+            detail=f"Run {run_id} is not cancellable (status: {record.status.value})",
+        )
 
     if wait and record.task is not None:
         try:
@@ -256,17 +207,14 @@ async def cancel_run(
 
 
 @router.get("/{thread_id}/runs/{run_id}/join")
-@require_permission("runs", "read", owner_check=True)
 async def join_run(thread_id: str, run_id: str, request: Request) -> StreamingResponse:
     """Join an existing run's SSE stream."""
+    bridge = get_stream_bridge(request)
     run_mgr = get_run_manager(request)
-    record = await run_mgr.get(run_id)
+    record = run_mgr.get(run_id)
     if record is None or record.thread_id != thread_id:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    if record.store_only:
-        raise HTTPException(status_code=409, detail=f"Run {run_id} is not active on this worker and cannot be streamed")
 
-    bridge = get_stream_bridge(request)
     return StreamingResponse(
         sse_consumer(bridge, record, request, run_mgr),
         media_type="text/event-stream",
@@ -278,13 +226,7 @@ async def join_run(thread_id: str, run_id: str, request: Request) -> StreamingRe
     )
 
 
-# Register GET and POST as separate routes so each method gets a unique OpenAPI
-# operationId. ``api_route(methods=["GET", "POST"])`` shares one route registration
-# across both methods, which makes FastAPI emit the same ``operationId`` twice and
-# warn about a duplicate operation id during OpenAPI generation.
-@router.get("/{thread_id}/runs/{run_id}/stream", response_model=None)
-@router.post("/{thread_id}/runs/{run_id}/stream", response_model=None)
-@require_permission("runs", "read", owner_check=True)
+@router.api_route("/{thread_id}/runs/{run_id}/stream", methods=["GET", "POST"], response_model=None)
 async def stream_existing_run(
     thread_id: str,
     run_id: str,
@@ -300,18 +242,14 @@ async def stream_existing_run(
     remaining buffered events so the client observes a clean shutdown.
     """
     run_mgr = get_run_manager(request)
-    record = await run_mgr.get(run_id)
+    record = run_mgr.get(run_id)
     if record is None or record.thread_id != thread_id:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    if record.store_only and action is None:
-        raise HTTPException(status_code=409, detail=f"Run {run_id} is not active on this worker and cannot be streamed")
 
     # Cancel if an action was requested (stop-button / interrupt flow)
     if action is not None:
         cancelled = await run_mgr.cancel(run_id, action=action)
-        if not cancelled:
-            raise HTTPException(status_code=409, detail=_cancel_conflict_detail(run_id, record))
-        if wait and record.task is not None:
+        if cancelled and wait and record.task is not None:
             try:
                 await record.task
             except (asyncio.CancelledError, Exception):
@@ -336,7 +274,6 @@ async def stream_existing_run(
 
 
 @router.get("/{thread_id}/messages")
-@require_permission("runs", "read", owner_check=True)
 async def list_thread_messages(
     thread_id: str,
     request: Request,
@@ -344,71 +281,19 @@ async def list_thread_messages(
     before_seq: int | None = Query(default=None),
     after_seq: int | None = Query(default=None),
 ) -> list[dict]:
-    """Return displayable messages for a thread (across all runs), with feedback attached."""
+    """Return displayable messages for a thread (across all runs)."""
     event_store = get_run_event_store(request)
-    messages = await event_store.list_messages(thread_id, limit=limit, before_seq=before_seq, after_seq=after_seq)
-
-    # Attach feedback to the last AI message of each run
-    feedback_repo = get_feedback_repo(request)
-    user_id = await get_current_user(request)
-    feedback_map = await feedback_repo.list_by_thread_grouped(thread_id, user_id=user_id)
-
-    # Find the last ai_message per run_id
-    last_ai_per_run: dict[str, int] = {}  # run_id -> index in messages list
-    for i, msg in enumerate(messages):
-        if msg.get("event_type") == "ai_message":
-            last_ai_per_run[msg["run_id"]] = i
-
-    # Attach feedback field
-    last_ai_indices = set(last_ai_per_run.values())
-    for i, msg in enumerate(messages):
-        if i in last_ai_indices:
-            run_id = msg["run_id"]
-            fb = feedback_map.get(run_id)
-            msg["feedback"] = (
-                {
-                    "feedback_id": fb["feedback_id"],
-                    "rating": fb["rating"],
-                    "comment": fb.get("comment"),
-                }
-                if fb
-                else None
-            )
-        else:
-            msg["feedback"] = None
-
-    return messages
+    return await event_store.list_messages(thread_id, limit=limit, before_seq=before_seq, after_seq=after_seq)
 
 
 @router.get("/{thread_id}/runs/{run_id}/messages")
-@require_permission("runs", "read", owner_check=True)
-async def list_run_messages(
-    thread_id: str,
-    run_id: str,
-    request: Request,
-    limit: int = Query(default=50, le=200, ge=1),
-    before_seq: int | None = Query(default=None),
-    after_seq: int | None = Query(default=None),
-) -> dict:
-    """Return paginated messages for a specific run.
-
-    Response: { data: [...], has_more: bool }
-    """
+async def list_run_messages(thread_id: str, run_id: str, request: Request) -> list[dict]:
+    """Return displayable messages for a specific run."""
     event_store = get_run_event_store(request)
-    rows = await event_store.list_messages_by_run(
-        thread_id,
-        run_id,
-        limit=limit + 1,
-        before_seq=before_seq,
-        after_seq=after_seq,
-    )
-    has_more = len(rows) > limit
-    data = rows[:limit] if has_more else rows
-    return {"data": data, "has_more": has_more}
+    return await event_store.list_messages_by_run(thread_id, run_id)
 
 
 @router.get("/{thread_id}/runs/{run_id}/events")
-@require_permission("runs", "read", owner_check=True)
 async def list_run_events(
     thread_id: str,
     run_id: str,
@@ -422,17 +307,9 @@ async def list_run_events(
     return await event_store.list_events(thread_id, run_id, event_types=types, limit=limit)
 
 
-@router.get("/{thread_id}/token-usage", response_model=ThreadTokenUsageResponse)
-@require_permission("threads", "read", owner_check=True)
-async def thread_token_usage(
-    thread_id: str,
-    request: Request,
-    include_active: bool = Query(default=False, description="Include running run progress snapshots"),
-) -> ThreadTokenUsageResponse:
+@router.get("/{thread_id}/token-usage")
+async def thread_token_usage(thread_id: str, request: Request) -> dict:
     """Thread-level token usage aggregation."""
     run_store = get_run_store(request)
-    if include_active:
-        agg = await run_store.aggregate_tokens_by_thread(thread_id, include_active=True)
-    else:
-        agg = await run_store.aggregate_tokens_by_thread(thread_id)
-    return ThreadTokenUsageResponse(thread_id=thread_id, **agg)
+    agg = await run_store.aggregate_tokens_by_thread(thread_id)
+    return {"thread_id": thread_id, **agg}

@@ -4,12 +4,8 @@ Controls BOTH the LangGraph checkpointer and the DeerFlow application
 persistence layer (runs, threads metadata, users, etc.). The user
 configures one backend; the system handles physical separation details.
 
-SQLite mode: checkpointer and app share a single .db file
-({sqlite_dir}/deerflow.db) with WAL journal mode enabled on every
-connection. WAL allows concurrent readers and a single writer without
-blocking, making a unified file safe for both workloads.  Writers
-that contend for the lock wait via the default 5-second sqlite3
-busy timeout rather than failing immediately.
+SQLite mode: checkpointer and app use different .db files in the same
+directory to avoid write-lock contention. This is automatic.
 
 Postgres mode: both use the same database URL but maintain independent
 connection pools with different lifecycles.
@@ -44,7 +40,7 @@ class DatabaseConfig(BaseModel):
     )
     sqlite_dir: str = Field(
         default=".deer-flow/data",
-        description=("Directory for the SQLite database file. Both checkpointer and application data share {sqlite_dir}/deerflow.db."),
+        description=("Directory for SQLite database files. Checkpointer uses {sqlite_dir}/checkpoints.db, application data uses {sqlite_dir}/app.db."),
     )
     postgres_url: str = Field(
         default="",
@@ -74,26 +70,20 @@ class DatabaseConfig(BaseModel):
         return str(Path(self.sqlite_dir).resolve())
 
     @property
-    def sqlite_path(self) -> str:
-        """Unified SQLite file path shared by checkpointer and app."""
-        return os.path.join(self._resolved_sqlite_dir, "deerflow.db")
-
-    # Backward-compatible aliases
-    @property
     def checkpointer_sqlite_path(self) -> str:
-        """SQLite file path for the LangGraph checkpointer (alias for sqlite_path)."""
-        return self.sqlite_path
+        """SQLite file path for the LangGraph checkpointer."""
+        return os.path.join(self._resolved_sqlite_dir, "checkpoints.db")
 
     @property
     def app_sqlite_path(self) -> str:
-        """SQLite file path for application ORM data (alias for sqlite_path)."""
-        return self.sqlite_path
+        """SQLite file path for application ORM data."""
+        return os.path.join(self._resolved_sqlite_dir, "app.db")
 
     @property
     def app_sqlalchemy_url(self) -> str:
         """SQLAlchemy async URL for the application ORM engine."""
         if self.backend == "sqlite":
-            return f"sqlite+aiosqlite:///{self.sqlite_path}"
+            return f"sqlite+aiosqlite:///{self.app_sqlite_path}"
         if self.backend == "postgres":
             url = self.postgres_url
             if url.startswith("postgresql://"):
