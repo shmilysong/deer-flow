@@ -1,12 +1,8 @@
-"""LangGraph compatibility auth handler — shares JWT logic with Gateway.
+"""LangGraph Server auth handler — shares JWT logic with Gateway.
 
-The default DeerFlow runtime is embedded in the FastAPI Gateway; scripts and
-Docker deployments do not load this module.  It is retained for LangGraph
-tooling, Studio, or direct LangGraph Server compatibility through
-``langgraph.json``'s ``auth.path``.
-
-When that compatibility path is used, this module reuses the same JWT and CSRF
-rules as Gateway so both modes validate sessions consistently.
+Loaded by LangGraph Server via langgraph.json ``auth.path``.
+Reuses the same ``decode_token`` / ``get_auth_config`` as Gateway,
+so both modes validate tokens with the same secret and rules.
 
 Two layers:
   1. @auth.authenticate — validates JWT cookie, extracts user_id,
@@ -77,7 +73,7 @@ async def authenticate(request):
     if isinstance(payload, TokenError):
         raise Auth.exceptions.HTTPException(
             status_code=401,
-            detail="Invalid token",
+            detail=f"Token error: {payload.value}",
         )
 
     user = await get_local_provider().get_user(payload.sub)
@@ -97,14 +93,14 @@ async def authenticate(request):
 
 @auth.on
 async def add_owner_filter(ctx: Auth.types.AuthContext, value: dict):
-    """Inject user_id metadata on writes; filter by user_id on reads.
+    """Inject owner_id metadata on writes; filter by owner_id on reads.
 
-    Gateway stores thread ownership as ``metadata.user_id``.
+    Gateway stores thread ownership as ``metadata.owner_id``.
     This handler ensures LangGraph Server enforces the same isolation.
     """
-    # On create/update: stamp user_id into metadata
+    # On create/update: stamp owner_id into metadata
     metadata = value.setdefault("metadata", {})
-    metadata["user_id"] = ctx.user.identity
+    metadata["owner_id"] = ctx.user.identity
 
     # Return filter dict — LangGraph applies it to search/read/delete
-    return {"user_id": ctx.user.identity}
+    return {"owner_id": ctx.user.identity}

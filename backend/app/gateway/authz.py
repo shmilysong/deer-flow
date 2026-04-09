@@ -30,9 +30,7 @@ Inspired by LangGraph Auth system: https://github.com/langchain-ai/langgraph/blo
 from __future__ import annotations
 
 import functools
-import inspect
 from collections.abc import Callable
-from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
 from fastapi import HTTPException, Request
@@ -119,15 +117,6 @@ _ALL_PERMISSIONS: list[str] = [
 ]
 
 
-def _make_test_request_stub() -> Any:
-    """Create a minimal request-like object for direct unit calls.
-
-    Used when decorated route handlers are invoked without FastAPI's
-    request injection. Includes fields accessed by auth helpers.
-    """
-    return SimpleNamespace(state=SimpleNamespace(), cookies={}, _deerflow_test_bypass_auth=True)
-
-
 async def _authenticate(request: Request) -> AuthContext:
     """Authenticate request and return AuthContext.
 
@@ -145,11 +134,7 @@ async def _authenticate(request: Request) -> AuthContext:
 
 
 def require_auth[**P, T](func: Callable[P, T]) -> Callable[P, T]:
-    """Decorator that authenticates the request and enforces authentication.
-
-    Independently raises HTTP 401 for unauthenticated requests, regardless of
-    whether ``AuthMiddleware`` is present in the ASGI stack. Sets the resolved
-    ``AuthContext`` on ``request.state.auth`` for downstream handlers.
+    """Decorator that authenticates the request and sets AuthContext.
 
     Must be placed ABOVE other decorators (executes after them).
 
@@ -162,33 +147,18 @@ def require_auth[**P, T](func: Callable[P, T]) -> Callable[P, T]:
             ...
 
     Raises:
-        HTTPException: 401 if the request is unauthenticated.
-        ValueError: If 'request' parameter is missing.
+        ValueError: If 'request' parameter is missing
     """
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         request = kwargs.get("request")
         if request is None:
-            # Unit tests may call decorated handlers directly without a
-            # FastAPI Request object. Inject a minimal request stub when
-            # the wrapped function declares `request`.
-            if "request" in inspect.signature(func).parameters:
-                kwargs["request"] = _make_test_request_stub()
-            else:
-                raise ValueError("require_auth decorator requires 'request' parameter")
-                return await func(*args, **kwargs)
-            request = kwargs["request"]
-
-        if getattr(request, "_deerflow_test_bypass_auth", False):
-            return await func(*args, **kwargs)
+            raise ValueError("require_auth decorator requires 'request' parameter")
 
         # Authenticate and set context
         auth_context = await _authenticate(request)
         request.state.auth = auth_context
-
-        if not auth_context.is_authenticated:
-            raise HTTPException(status_code=401, detail="Authentication required")
 
         return await func(*args, **kwargs)
 
@@ -240,17 +210,7 @@ def require_permission(
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             request = kwargs.get("request")
             if request is None:
-                # Unit tests may call decorated route handlers directly without
-                # constructing a FastAPI Request object. Inject a minimal stub
-                # when the wrapped function declares `request`.
-                if "request" in inspect.signature(func).parameters:
-                    kwargs["request"] = _make_test_request_stub()
-                else:
-                    return await func(*args, **kwargs)
-                request = kwargs["request"]
-
-            if getattr(request, "_deerflow_test_bypass_auth", False):
-                return await func(*args, **kwargs)
+                raise ValueError("require_permission decorator requires 'request' parameter")
 
             auth: AuthContext = getattr(request.state, "auth", None)
             if auth is None:
@@ -273,18 +233,18 @@ def require_permission(
             # (``threads_meta`` table). We verify ownership via
             # ``ThreadMetaStore.check_access``: it returns True for
             # missing rows (untracked legacy thread) and for rows whose
-            # ``user_id`` is NULL (shared / pre-auth data), so this is
+            # ``owner_id`` is NULL (shared / pre-auth data), so this is
             # strict-deny rather than strict-allow — only an *existing*
-            # row with a *different* user_id triggers 404.
+            # row with a *different* owner_id triggers 404.
             if owner_check:
                 thread_id = kwargs.get("thread_id")
                 if thread_id is None:
                     raise ValueError("require_permission with owner_check=True requires 'thread_id' parameter")
 
-                from app.gateway.deps import get_thread_store
+                from app.gateway.deps import get_thread_meta_repo
 
-                thread_store = get_thread_store(request)
-                allowed = await thread_store.check_access(
+                thread_meta_repo = get_thread_meta_repo(request)
+                allowed = await thread_meta_repo.check_access(
                     thread_id,
                     str(auth.user.id),
                     require_existing=require_existing,

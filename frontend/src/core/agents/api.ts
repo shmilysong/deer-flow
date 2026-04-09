@@ -1,4 +1,4 @@
-import { fetch } from "@/core/api/fetcher";
+import { fetchWithAuth } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
 import type { Agent, CreateAgentRequest, UpdateAgentRequest } from "./types";
@@ -9,30 +9,10 @@ export class AgentNameCheckError extends Error {
   constructor(
     message: string,
     public readonly reason: "backend_unreachable" | "request_failed",
-    /**
-     * Raw backend `detail` string when the failure came from a backend
-     * response carrying one. `null` when no detail was provided (e.g.
-     * network-layer failure, empty response body, unparseable body) — in
-     * which case `message` is a generated fallback like "Failed to check
-     * agent name: Bad Gateway" and the UI should prefer its own localized
-     * fallback instead of surfacing the generated string.
-     */
-    public readonly detail: string | null = null,
   ) {
     super(message);
     this.name = "AgentNameCheckError";
   }
-}
-
-export class AgentsApiDisabledError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AgentsApiDisabledError";
-  }
-}
-
-function isAgentsApiDisabledDetail(detail: string | undefined): boolean {
-  return typeof detail === "string" && detail.includes("agents_api.enabled");
 }
 
 export async function listAgents(): Promise<Agent[]> {
@@ -49,16 +29,13 @@ export async function getAgent(name: string): Promise<Agent> {
 }
 
 export async function createAgent(request: CreateAgentRequest): Promise<Agent> {
-  const res = await fetch(`${getBackendBaseURL()}/api/agents`, {
+  const res = await fetchWithAuth(`${getBackendBaseURL()}/api/agents`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    if (isAgentsApiDisabledDetail(err.detail)) {
-      throw new AgentsApiDisabledError(err.detail!);
-    }
     throw new Error(err.detail ?? `Failed to create agent: ${res.statusText}`);
   }
   return res.json() as Promise<Agent>;
@@ -68,7 +45,7 @@ export async function updateAgent(
   name: string,
   request: UpdateAgentRequest,
 ): Promise<Agent> {
-  const res = await fetch(`${getBackendBaseURL()}/api/agents/${name}`, {
+  const res = await fetchWithAuth(`${getBackendBaseURL()}/api/agents/${name}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -81,7 +58,7 @@ export async function updateAgent(
 }
 
 export async function deleteAgent(name: string): Promise<void> {
-  const res = await fetch(`${getBackendBaseURL()}/api/agents/${name}`, {
+  const res = await fetchWithAuth(`${getBackendBaseURL()}/api/agents/${name}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error(`Failed to delete agent: ${res.statusText}`);
@@ -104,20 +81,15 @@ export async function checkAgentName(
 
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    if (isAgentsApiDisabledDetail(err.detail)) {
-      throw new AgentsApiDisabledError(err.detail!);
-    }
     if (BACKEND_UNAVAILABLE_STATUSES.has(res.status)) {
       throw new AgentNameCheckError(
         "Could not reach the DeerFlow backend.",
         "backend_unreachable",
       );
     }
-    const backendDetail = typeof err.detail === "string" ? err.detail : null;
     throw new AgentNameCheckError(
-      backendDetail ?? `Failed to check agent name: ${res.statusText}`,
+      err.detail ?? `Failed to check agent name: ${res.statusText}`,
       "request_failed",
-      backendDetail,
     );
   }
   return res.json() as Promise<{ available: boolean; name: string }>;

@@ -4,11 +4,12 @@ import logging
 import os
 import secrets
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
+load_dotenv()
 
-_SECRET_FILE = ".jwt_secret"
+logger = logging.getLogger(__name__)
 
 
 class AuthConfig(BaseModel):
@@ -32,46 +33,17 @@ class AuthConfig(BaseModel):
 _auth_config: AuthConfig | None = None
 
 
-def _load_or_create_secret() -> str:
-    """Load persisted JWT secret from ``{base_dir}/.jwt_secret``, or generate and persist a new one."""
-    from deerflow.config.paths import get_paths
-
-    paths = get_paths()
-    secret_file = paths.base_dir / _SECRET_FILE
-
-    try:
-        if secret_file.exists():
-            secret = secret_file.read_text(encoding="utf-8").strip()
-            if secret:
-                return secret
-    except OSError as exc:
-        raise RuntimeError(f"Failed to read JWT secret from {secret_file}. Set AUTH_JWT_SECRET explicitly or fix DEER_FLOW_HOME/base directory permissions so DeerFlow can read its persisted auth secret.") from exc
-
-    secret = secrets.token_urlsafe(32)
-    try:
-        secret_file.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(secret_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(secret)
-    except OSError as exc:
-        raise RuntimeError(f"Failed to persist JWT secret to {secret_file}. Set AUTH_JWT_SECRET explicitly or fix DEER_FLOW_HOME/base directory permissions so DeerFlow can store a stable auth secret.") from exc
-    return secret
-
-
 def get_auth_config() -> AuthConfig:
     """Get the global AuthConfig instance. Parses from env on first call."""
     global _auth_config
     if _auth_config is None:
-        from dotenv import load_dotenv
-
-        load_dotenv()
         jwt_secret = os.environ.get("AUTH_JWT_SECRET")
         if not jwt_secret:
-            jwt_secret = _load_or_create_secret()
+            jwt_secret = secrets.token_urlsafe(32)
             os.environ["AUTH_JWT_SECRET"] = jwt_secret
             logger.warning(
-                "⚠ AUTH_JWT_SECRET is not set — using an auto-generated secret "
-                "persisted to .jwt_secret. Sessions will survive restarts. "
+                "⚠ AUTH_JWT_SECRET is not set — using an auto-generated ephemeral secret. "
+                "Sessions will be invalidated on restart. "
                 "For production, add AUTH_JWT_SECRET to your .env file: "
                 'python -c "import secrets; print(secrets.token_urlsafe(32))"'
             )

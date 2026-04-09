@@ -1,13 +1,9 @@
 """Local email/password authentication provider."""
 
-import logging
-
 from app.gateway.auth.models import User
-from app.gateway.auth.password import hash_password_async, needs_rehash, verify_password_async
+from app.gateway.auth.password import hash_password_async, verify_password_async
 from app.gateway.auth.providers import AuthProvider
 from app.gateway.auth.repositories.base import UserRepository
-
-logger = logging.getLogger(__name__)
 
 
 class LocalAuthProvider(AuthProvider):
@@ -47,15 +43,6 @@ class LocalAuthProvider(AuthProvider):
         if not await verify_password_async(password, user.password_hash):
             return None
 
-        if needs_rehash(user.password_hash):
-            try:
-                user.password_hash = await hash_password_async(password)
-                await self._repo.update_user(user)
-            except Exception:
-                # Rehash is an opportunistic upgrade; a transient DB error must not
-                # prevent an otherwise-valid login from succeeding.
-                logger.warning("Failed to rehash password for user %s; login will still succeed", user.email, exc_info=True)
-
         return user
 
     async def get_user(self, user_id: str) -> User | None:
@@ -90,10 +77,6 @@ class LocalAuthProvider(AuthProvider):
     async def count_users(self) -> int:
         """Return total number of registered users."""
         return await self._repo.count_users()
-
-    async def count_admin_users(self) -> int:
-        """Return number of admin users."""
-        return await self._repo.count_admin_users()
 
     async def update_user(self, user: User) -> User:
         """Update an existing user."""

@@ -23,8 +23,6 @@ export default async function WorkspaceLayout({
       );
     case "needs_setup":
       redirect("/setup");
-    case "system_setup_required":
-      redirect("/setup");
     case "unauthenticated":
       redirect("/login");
     case "gateway_unavailable":
@@ -43,14 +41,12 @@ export default async function WorkspaceLayout({
             >
               Retry
             </Link>
-            <form action="/api/v1/auth/logout" method="post">
-              <button
-                type="submit"
-                className="text-muted-foreground hover:bg-muted rounded-md border px-4 py-2 text-sm"
-              >
-                Logout &amp; Reset
-              </button>
-            </form>
+            <Link
+              href="/api/v1/auth/logout"
+              className="text-muted-foreground hover:bg-muted rounded-md border px-4 py-2 text-sm"
+            >
+              Logout &amp; Reset
+            </Link>
           </div>
         </div>
       );
