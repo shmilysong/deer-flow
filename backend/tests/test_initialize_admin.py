@@ -1,7 +1,7 @@
 """Tests for the POST /api/v1/auth/initialize endpoint.
 
 Covers: first-boot admin creation, rejection when system already
-initialized, password strength validation,
+initialized, invalid/missing init_token, password strength validation,
 and public accessibility (no auth cookie required).
 """
 
@@ -16,13 +16,13 @@ os.environ.setdefault("AUTH_JWT_SECRET", "test-secret-key-initialize-admin-min-3
 from app.gateway.auth.config import AuthConfig, set_auth_config
 
 _TEST_SECRET = "test-secret-key-initialize-admin-min-32"
+_INIT_TOKEN = "test-init-token-for-initialization-tests"
 
 
 @pytest.fixture(autouse=True)
 def _setup_auth(tmp_path):
     """Fresh SQLite engine + auth config per test."""
     from app.gateway import deps
-    from app.gateway.routers.auth import _SETUP_STATUS_COOLDOWN
     from deerflow.persistence.engine import close_engine, init_engine
 
     set_auth_config(AuthConfig(jwt_secret=_TEST_SECRET))
@@ -30,13 +30,11 @@ def _setup_auth(tmp_path):
     asyncio.run(init_engine("sqlite", url=url, sqlite_dir=str(tmp_path)))
     deps._cached_local_provider = None
     deps._cached_repo = None
-    _SETUP_STATUS_COOLDOWN.clear()
     try:
         yield
     finally:
         deps._cached_local_provider = None
         deps._cached_repo = None
-        _SETUP_STATUS_COOLDOWN.clear()
         asyncio.run(close_engine())
 
 
@@ -47,6 +45,9 @@ def client(_setup_auth):
 
     set_auth_config(AuthConfig(jwt_secret=_TEST_SECRET))
     app = create_app()
+    # Pre-set the init token on app.state (normally done by the lifespan on
+    # first boot; tests don't run the lifespan because it requires config.yaml).
+    app.state.init_token = _INIT_TOKEN
     # Do NOT use TestClient as a context manager — that would trigger the
     # full lifespan which requires config.yaml. The auth endpoints work
     # without the lifespan (persistence engine is set up by _setup_auth).
@@ -54,10 +55,11 @@ def client(_setup_auth):
 
 
 def _init_payload(**extra):
-    """Build a valid /initialize payload."""
+    """Build a valid /initialize payload with the test init_token."""
     return {
         "email": "admin@example.com",
         "password": "Str0ng!Pass99",
+        "init_token": _INIT_TOKEN,
         **extra,
     }
 
@@ -83,12 +85,53 @@ def test_initialize_needs_setup_false(client):
     assert me.json()["needs_setup"] is False
 
 
+# ── Token validation ──────────────────────────────────────────────────────
+
+
+def test_initialize_rejects_wrong_token(client):
+    """Wrong init_token → 403 invalid_init_token."""
+    resp = client.post(
+        "/api/v1/auth/initialize",
+        json={**_init_payload(), "init_token": "wrong-token"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "invalid_init_token"
+
+
+def test_initialize_rejects_empty_token(client):
+    """Empty init_token → 403 (fails constant-time comparison against stored token)."""
+    resp = client.post(
+        "/api/v1/auth/initialize",
+        json={**_init_payload(), "init_token": ""},
+    )
+    assert resp.status_code == 403
+
+
+def test_initialize_token_consumed_after_success(client):
+    """After a successful /initialize the token is consumed and cannot be reused."""
+    client.post("/api/v1/auth/initialize", json=_init_payload())
+    # The token is now None; any subsequent call with the old token must be rejected (403)
+    resp2 = client.post(
+        "/api/v1/auth/initialize",
+        json={**_init_payload(), "email": "other@example.com"},
+    )
+    assert resp2.status_code == 403
+
+
 # ── Rejection when already initialized ───────────────────────────────────
 
 
 def test_initialize_rejected_when_admin_exists(client):
-    """Second call to /initialize after admin exists → 409 system_already_initialized."""
+    """Second call to /initialize after admin exists → 409 system_already_initialized.
+
+    The first call consumes the token.  Re-setting it on app.state simulates
+    what would happen if the operator somehow restarted or manually refreshed
+    the token (e.g., in testing).
+    """
     client.post("/api/v1/auth/initialize", json=_init_payload())
+    # Re-set the token so the second attempt can pass token validation
+    # and reach the admin-exists check.
+    client.app.state.init_token = _INIT_TOKEN
     resp2 = client.post(
         "/api/v1/auth/initialize",
         json={**_init_payload(), "email": "other@example.com"},
@@ -96,6 +139,24 @@ def test_initialize_rejected_when_admin_exists(client):
     assert resp2.status_code == 409
     body = resp2.json()
     assert body["detail"]["code"] == "system_already_initialized"
+
+
+def test_initialize_token_not_consumed_on_admin_exists(client):
+    """Token is NOT consumed when the admin-exists guard rejects the request.
+
+    This prevents a DoS where an attacker calls with the correct token when
+    admin already exists and permanently burns the init token.
+    """
+    client.post("/api/v1/auth/initialize", json=_init_payload())
+    # Token consumed by success above; re-simulate the scenario:
+    # admin exists, token is still valid (re-set), call should 409 and NOT consume token.
+    client.app.state.init_token = _INIT_TOKEN
+    client.post(
+        "/api/v1/auth/initialize",
+        json={**_init_payload(), "email": "other@example.com"},
+    )
+    # Token must still be set (not consumed) after the 409 rejection.
+    assert client.app.state.init_token == _INIT_TOKEN
 
 
 def test_initialize_register_does_not_block_initialization(client):
@@ -166,17 +227,3 @@ def test_setup_status_false_when_only_regular_user_exists(client):
     resp = client.get("/api/v1/auth/setup-status")
     assert resp.status_code == 200
     assert resp.json()["needs_setup"] is True
-
-
-def test_setup_status_rate_limited_on_second_call(client):
-    """Second /setup-status call within the cooldown window returns 429 with Retry-After."""
-    # First call succeeds.
-    resp1 = client.get("/api/v1/auth/setup-status")
-    assert resp1.status_code == 200
-
-    # Immediate second call is rate-limited.
-    resp2 = client.get("/api/v1/auth/setup-status")
-    assert resp2.status_code == 429
-    assert "Retry-After" in resp2.headers
-    retry_after = int(resp2.headers["Retry-After"])
-    assert 1 <= retry_after <= 60

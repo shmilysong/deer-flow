@@ -70,24 +70,12 @@ export function AccountSettingsPage() {
 
   return (
     <div className="space-y-8">
-      <SettingsSection title={t.settings.account.profileTitle}>
+      <SettingsSection title="Profile">
         <div className="space-y-2">
           <div className="grid grid-cols-[max-content_max-content] items-center gap-4">
-            {/*
-            // ================================================================
-            // 🚫 以下两行被隐藏——原因：
-            //    当前使用 ADS 统一认证登录，返回的 email 为固定的
-            //    "admin@example.com", system_role 为 "user"，均为占位值
-            //    不反映实际 ADS 账号信息，显示出来会误导用户。
-            //    改为只显示 ADS 账号名（从 email 前缀提取）。
-            // ================================================================
-            <span className="text-muted-foreground text-sm">
-              {t.settings.account.email}
-            </span>
+            <span className="text-muted-foreground text-sm">Email</span>
             <span className="text-sm font-medium">{user?.email ?? "—"}</span>
-            <span className="text-muted-foreground text-sm">
-              {t.settings.account.role}
-            </span>
+            <span className="text-muted-foreground text-sm">Role</span>
             <span className="text-sm font-medium capitalize">
               {user?.system_role ?? "—"}
             </span>
@@ -100,17 +88,9 @@ export function AccountSettingsPage() {
         </div>
       </SettingsSection>
 
-      {/*
-      // ================================================================
-      // 🚫 以下"修改密码"区域被隐藏——原因：
-      //    当前使用 ADS 统一认证登录，密码由 ADS 统一管理，
-      //    无法通过 DeerFlow 原生 change-password API 修改密码。
-      //    展示此区域会给用户错误的预期（以为可以在这里改密码）。
-      //    保留代码供恢复参考。
-      // ================================================================
       <SettingsSection
-        title={t.settings.account.changePasswordTitle}
-        description={t.settings.account.changePasswordDescription}
+        title="Change Password"
+        description="Update your account password."
       >
         <form onSubmit={handleChangePassword} className="max-w-sm space-y-3">
           <Input
