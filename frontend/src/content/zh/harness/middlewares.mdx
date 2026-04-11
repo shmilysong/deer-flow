@@ -1,16 +1,8 @@
----
-title: 中间件
-description: 每次 Lead Agent 调用 LLM 时，都会先后执行一条**中间件链**。中间件可以读取和修改 Agent 的状态、向系统提示注入内容、拦截工具调用，并对模型输出做出反应。
----
-
 import { Callout } from "nextra/components";
 
 # 中间件
 
 <Callout type="info" emoji="🔌">
-  中间件包裹 Lead Agent 中的每次 LLM
-  调用。它们是添加跨领域行为（如记忆、摘要压缩、澄清和 token
-  追踪）的主要扩展点。
   中间件包裹 Lead Agent 中的每次 LLM 调用。它们是添加跨领域行为（如记忆、摘要压缩、澄清和 token 追踪）的主要扩展点。
 </Callout>
 
@@ -51,8 +43,6 @@ import { Callout } from "nextra/components";
 
 检测 Agent 是否在没有取得进展的情况下重复进行相同的工具调用。检测到循环时，中间件会介入打破循环，防止 Agent 无限消耗轮次。
 
-Warning 介入会按 thread 和 run 排队，并在下一次模型调用时合并为一条隐藏的 `HumanMessage(name="loop_warning")`，追加到已有工具结果之后。这样不会破坏 provider 对 tool-call/tool-message 配对的校验。Run 开始和结束时会清理过期或未送达的 warning；达到 hard stop 时仍会清空 tool calls 并强制生成最终文本回复。
-
 **配置**：内置，无需用户配置。
 
 ---
@@ -92,7 +82,6 @@ title:
   enabled: true
   max_words: 6
   max_chars: 60
-  model_name: null # 使用默认模型
   model_name: null  # 使用默认模型
 ```
 
@@ -114,7 +103,7 @@ title:
 
 ```yaml
 token_usage:
-  enabled: true
+  enabled: false
 ```
 
 ---
@@ -155,10 +144,8 @@ summarization:
 
   # 触发条件——满足任意一个条件时运行摘要
   trigger:
-    - type: tokens # 当上下文超过 N 个 token 时触发
     - type: tokens      # 当上下文超过 N 个 token 时触发
       value: 15564
-      value: 32000
     # - type: messages  # 当消息数超过 N 时触发
     #   value: 50
     # - type: fraction  # 当上下文达到模型最大输入的 X% 时触发
@@ -167,7 +154,6 @@ summarization:
   # 摘要后保留多少最近历史
   keep:
     type: messages
-    value: 10 # 保留最近 10 条消息
     value: 10           # 保留最近 10 条消息
     # 或者按 token 保留：
     # type: tokens
@@ -181,13 +167,11 @@ summarization:
 ```
 
 **触发类型**：
-
 - `tokens`：当对话中总 token 数超过 `value` 时触发。
 - `messages`：当消息数超过 `value` 时触发。
 - `fraction`：当上下文达到模型最大输入 token 限制的 `value` 比例时触发。
 
 **保留类型**：
-
 - `messages`：摘要后保留最后 `value` 条消息。
 - `tokens`：保留最近 `value` 个 token 的历史。
 - `fraction`：保留模型最大输入 token 限制的 `value` 比例的最近历史。

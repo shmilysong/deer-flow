@@ -1,8 +1,3 @@
----
-title: Customization
-description: DeerFlow's pluggable architecture means most parts of the system can be replaced or extended without forking the core. This page maps the extension points and explains how to use each one.
----
-
 import { Callout, Cards } from "nextra/components";
 
 # Customization
@@ -170,10 +165,6 @@ guardrails:
 For custom guardrail logic, implement a class with `evaluate()` and `aevaluate()` methods and reference it via `use:`.
 
 <Cards num={2}>
-  <Cards.Card
-    title="Integration Guide"
-    href="/docs/harness/integration-guide"
-  />
   <Cards.Card title="Integration Guide" href="/docs/harness/integration-guide" />
   <Cards.Card title="Configuration" href="/docs/harness/configuration" />
 </Cards>
