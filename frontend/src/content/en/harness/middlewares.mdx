@@ -1,8 +1,3 @@
----
-title: Middlewares
-description: Every time the Lead Agent calls the LLM, it runs through a **middleware chain** before and after the model call. Middlewares can read and modify the agent's state, inject content into the system prompt, intercept tool calls, and react to model outputs.
----
-
 import { Callout } from "nextra/components";
 
 # Middlewares
@@ -50,8 +45,6 @@ Intercepts clarification tool calls and converts them into proper user-facing re
 
 Detects when the agent is making the same tool call repeatedly without making progress. When a loop is detected, the middleware intervenes to break the cycle and prevents the agent from burning turns indefinitely.
 
-Warning interventions are queued per thread and run, then drained on the next model call as a single hidden `HumanMessage(name="loop_warning")` appended after existing tool results. This keeps provider tool-call pairing valid. Run start/end hooks clear stale or undelivered warnings, and hard stops still strip tool calls before forcing a final text response.
-
 **Configuration**: built-in, no user configuration.
 
 ---
@@ -91,7 +84,6 @@ title:
   enabled: true
   max_words: 6
   max_chars: 60
-  model_name: null # use default model
   model_name: null  # use default model
 ```
 
@@ -113,7 +105,7 @@ Tracks LLM token consumption per model call and logs it at the `info` level. Use
 
 ```yaml
 token_usage:
-  enabled: true
+  enabled: false
 ```
 
 ---
@@ -162,10 +154,8 @@ summarization:
 
   # Trigger conditions — summarization runs when ANY threshold is met
   trigger:
-    - type: tokens # trigger when context exceeds N tokens
     - type: tokens      # trigger when context exceeds N tokens
       value: 15564
-      value: 32000
     # - type: messages  # trigger when there are more than N messages
     #   value: 50
     # - type: fraction  # trigger when context exceeds X% of model max
@@ -174,7 +164,6 @@ summarization:
   # How much recent history to keep after summarization
   keep:
     type: messages
-    value: 10 # keep the 10 most recent messages
     value: 10           # keep the 10 most recent messages
     # Alternative: keep by tokens
     # type: tokens
@@ -188,7 +177,6 @@ summarization:
 ```
 
 **Trigger types**:
-
 - `tokens`: triggers when the total token count in the conversation exceeds `value`.
 - `messages`: triggers when the number of messages exceeds `value`.
 - `fraction`: triggers when the context reaches `value` fraction of the model's maximum input token limit.
@@ -196,7 +184,6 @@ summarization:
 Multiple triggers can be listed; summarization runs when **any** of them fires.
 
 **Keep types**:
-
 - `messages`: keep the last `value` messages after summarization.
 - `tokens`: keep up to `value` tokens of recent history.
 - `fraction`: keep up to `value` fraction of the model's max input token limit.

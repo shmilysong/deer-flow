@@ -1,8 +1,3 @@
----
-title: Design Principles
-description: Understanding the design principles behind DeerFlow Harness helps you use it effectively, extend it confidently, and reason about how your agents will behave in production.
----
-
 import { Callout, Cards } from "nextra/components";
 
 # Design Principles
@@ -110,15 +105,6 @@ Environment variable interpolation (`api_key: $OPENAI_API_KEY`) keeps secrets ou
 
 ## Summary
 
-| Principle                   | What it means in practice                                      |
-| --------------------------- | -------------------------------------------------------------- |
-| Harness, not framework      | Ready-to-run runtime with all the infrastructure already wired |
-| Long-horizon first          | Architecture assumes multi-step, multi-tool, multi-turn tasks  |
-| Middleware over inheritance | Behavior is composed from small, isolated plugins              |
-| Skills for specialization   | Domain capability injected on demand, keeping the base clean   |
-| Sandbox for execution       | Isolated workspace for real file and command work              |
-| Context engineering         | Active management of what the agent sees to stay effective     |
-| Config-driven               | All key behaviors are controlled through `config.yaml`         |
 | Principle | What it means in practice |
 |---|---|
 | Harness, not framework | Ready-to-run runtime with all the infrastructure already wired |

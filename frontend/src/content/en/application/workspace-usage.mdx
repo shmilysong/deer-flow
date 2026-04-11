@@ -1,8 +1,3 @@
----
-title: Workspace Usage
-description: The DeerFlow App workspace is a browser-based interface for having multi-turn conversations with the agent, tracking task progress, viewing artifacts, and managing files.
----
-
 import { Callout, Cards } from "nextra/components";
 
 # Workspace Usage
@@ -67,26 +62,6 @@ Each agent response in the conversation may contain:
 
 Tool calls and thinking steps are collapsed by default. Click to expand them.
 
-## Understanding token usage
-
-If token usage display is enabled, DeerFlow shows one conversation-level total in
-the header and optional per-turn or debug summaries in the message list.
-
-- **Header total**: the persisted thread-level total from the backend. While the
-  current run is still streaming, the header may also include the visible
-  in-flight usage for that unfinished response.
-- **Per-turn / debug usage**: usage derived from the assistant messages that are
-  currently visible in the conversation view.
-
-This means the header total and the visible per-turn totals do **not** need to
-add up exactly. The header is a thread ledger; the per-turn view is a rendering
-of the messages you can currently see.
-
-These totals may also differ from your provider's billing page. Common reasons
-include retries, failed requests, cached input tokens, reasoning tokens,
-provider-specific billing rules, and internal calls that do not appear as normal
-chat messages.
-
 ## Switching agents
 
 If you have created custom agents, use the **Agent** selector in the input bar to switch to a different agent. The selected agent persists for the duration of the thread.
@@ -94,10 +69,6 @@ If you have created custom agents, use the **Agent** selector in the input bar t
 Custom agents may have different models, skills, tool sets, and system prompts. See [Agents and Threads](/docs/application/agents-and-threads) for how to create and manage custom agents.
 
 <Cards num={2}>
-  <Cards.Card
-    title="Agents and Threads"
-    href="/docs/application/agents-and-threads"
-  />
   <Cards.Card title="Agents and Threads" href="/docs/application/agents-and-threads" />
   <Cards.Card title="Configuration" href="/docs/application/configuration" />
 </Cards>

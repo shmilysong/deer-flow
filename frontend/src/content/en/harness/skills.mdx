@@ -1,8 +1,3 @@
----
-title: Skills
-description: A skill is more than a prompt. It is a self-contained capability package that can include structured instructions, step-by-step workflows, domain-specific best practices, supporting resources, and tool configurations. Skills are loaded on demand — they inject their content when a task calls for them and stay out of the context otherwise.
----
-
 import { Callout, Cards, FileTree, Steps } from "nextra/components";
 
 # Skills
@@ -44,23 +39,6 @@ The `SKILL.md` file is the authoritative definition of the skill. It is parsed b
 
 DeerFlow ships with the following public skills:
 
-| Skill                          | Description                                                                      |
-| ------------------------------ | -------------------------------------------------------------------------------- |
-| `deep-research`                | Multi-step research with source gathering, cross-checking, and structured output |
-| `data-analysis`                | Data exploration, statistical analysis, and insight generation                   |
-| `chart-visualization`          | Chart and graph creation from data                                               |
-| `ppt-generation`               | Presentation slide generation                                                    |
-| `image-generation`             | AI image generation workflows                                                    |
-| `code-documentation`           | Automated code documentation generation                                          |
-| `newsletter-generation`        | Newsletter content creation                                                      |
-| `podcast-generation`           | Podcast script and outline generation                                            |
-| `academic-paper-review`        | Structured academic paper analysis                                               |
-| `consulting-analysis`          | Business consulting frameworks and analysis                                      |
-| `systematic-literature-review` | Literature review methodology and synthesis                                      |
-| `github-deep-research`         | Repository and code deep-dive research                                           |
-| `frontend-design`              | Frontend design and UI workflow                                                  |
-| `web-design-guidelines`        | Web design standards and review                                                  |
-| `video-generation`             | Video content planning and generation                                            |
 | Skill | Description |
 |---|---|
 | `deep-research` | Multi-step research with source gathering, cross-checking, and structured output |
@@ -85,7 +63,7 @@ DeerFlow ships with the following public skills:
 
 ### Discovery and loading
 
-`load_skills()` in `skills/loader.py` scans both `public/` and `custom/` directories under the configured skills path. It re-reads `ExtensionsConfig.from_file()` on every call, which means enabling or disabling a skill through the Gateway API takes effect immediately in the running agent runtime without a restart.
+`load_skills()` in `skills/loader.py` scans both `public/` and `custom/` directories under the configured skills path. It re-reads `ExtensionsConfig.from_file()` on every call, which means enabling or disabling a skill through the Gateway API takes effect immediately in the running LangGraph server without a restart.
 
 ### Parsing
 
@@ -156,8 +134,6 @@ DeerFlow includes an optional **skill evolution** feature that allows the agent 
 
 ```yaml
 skill_evolution:
-  enabled: false # Set to true to allow agent-managed skill creation
-  moderation_model_name: null # Model for security scanning (null = use default)
   enabled: false  # Set to true to allow agent-managed skill creation
   moderation_model_name: null  # Model for security scanning (null = use default)
 ```

@@ -1,8 +1,3 @@
----
-title: Operations and Troubleshooting
-description: This page covers day-to-day operational tasks and solutions to common problems when running DeerFlow App.
----
-
 import { Callout, Cards } from "nextra/components";
 
 # Operations and Troubleshooting
@@ -13,28 +8,23 @@ This page covers day-to-day operational tasks and solutions to common problems w
 
 All services write logs to the `logs/` directory when started with `make dev`:
 
-| File                 | Service                              |
-| -------------------- | ------------------------------------ |
-| `logs/gateway.log`   | FastAPI Gateway API and agent runtime |
-| `logs/frontend.log`  | Next.js frontend dev server          |
-| `logs/nginx.log`     | nginx reverse proxy                  |
 | File | Service |
 |---|---|
 | `logs/langgraph.log` | LangGraph / DeerFlow Harness runtime |
-| `logs/gateway.log`   | FastAPI Gateway API                  |
-| `logs/frontend.log`  | Next.js frontend dev server          |
-| `logs/nginx.log`     | nginx reverse proxy                  |
+| `logs/gateway.log` | FastAPI Gateway API |
+| `logs/frontend.log` | Next.js frontend dev server |
+| `logs/nginx.log` | nginx reverse proxy |
 
 Tail logs in real time:
 
 ```bash
+tail -f logs/langgraph.log
 tail -f logs/gateway.log
 ```
 
 Adjust the runtime log level in `config.yaml`:
 
 ```yaml
-log_level: debug # debug | info | warning | error
 log_level: debug  # debug | info | warning | error
 ```
 
@@ -45,6 +35,9 @@ Verify each service is responding:
 ```bash
 # Gateway health
 curl http://localhost:8001/health
+
+# LangGraph health
+curl http://localhost:2024/ok
 
 # Through nginx (verifies full proxy chain)
 curl http://localhost:2026/api/models
@@ -68,7 +61,7 @@ grep config_version config.yaml
 
 ### The app loads but the agent doesn't respond
 
-1. Check `logs/gateway.log` for startup errors.
+1. Check `logs/langgraph.log` for startup errors.
 2. Verify your model is correctly configured in `config.yaml` with a valid API key.
 3. Confirm the API key environment variable is set in the shell that ran `make dev`.
 4. Test the model endpoint directly with `curl` to rule out network issues.
@@ -128,7 +121,7 @@ Connection refused: http://provisioner:8002
 
 If MCP tools appear in `extensions_config.json` but are not available in the agent:
 
-1. Check `logs/gateway.log` for MCP initialization errors.
+1. Check `logs/langgraph.log` for MCP initialization errors.
 2. Verify the MCP server command is installed (`npx`, `uvx`, or the relevant binary).
 3. Test the server command manually to confirm it starts without errors.
 4. Set `log_level: debug` to see detailed MCP loading output.
@@ -139,7 +132,7 @@ If MCP tools appear in `extensions_config.json` but are not available in the age
 
 - Verify `memory.enabled: true` in `config.yaml`.
 - Check that the storage path is writable: `ls -la backend/.deer-flow/`.
-- Look for memory update errors in `logs/gateway.log` (search for "memory").
+- Look for memory update errors in `logs/langgraph.log` (search for "memory").
 
 ## Data backup
 
@@ -173,10 +166,6 @@ make dev
 Individual service restart scripts are in `scripts/`. For targeted restarts, you can kill and relaunch individual processes manually using the PIDs in the log files.
 
 <Cards num={2}>
-  <Cards.Card
-    title="Deployment Guide"
-    href="/docs/application/deployment-guide"
-  />
   <Cards.Card title="Deployment Guide" href="/docs/application/deployment-guide" />
   <Cards.Card title="Configuration" href="/docs/application/configuration" />
 </Cards>

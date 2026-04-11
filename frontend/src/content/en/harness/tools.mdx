@@ -1,8 +1,3 @@
----
-title: Tools
-description: "The Lead Agent is a tool-calling agent. Tools are how it interacts with the world: searching the web, reading and writing files, running commands, delegating tasks, and presenting outputs to the user."
----
-
 import { Callout, Cards, Tabs } from "nextra/components";
 
 # Tools
@@ -64,12 +59,6 @@ Dynamically configures the current agent session. Used during the bootstrap flow
 
 ---
 
-### update_agent
-
-Persists updates to the current custom agent's `SOUL.md` and `config.yaml`. Bound to the lead agent only when a custom agent is active (`agent_name` is set in the runtime context). Use this when the user asks the agent to refine its own description, personality, skill whitelist, tool-group whitelist, or default model — it writes directly into the per-user layout `{base_dir}/users/{user_id}/agents/{agent_name}/`, so the change is picked up automatically on the next user turn. Only the fields you explicitly pass are updated; omit a field to preserve its existing value. Pass `skills=[]` to disable all skills, or omit `skills` to keep the existing whitelist.
-
----
-
 ### invoke_acp_agent
 
 Invokes an external agent using the [Agent Connect Protocol (ACP)](https://agentconnectprotocol.org/). Requires `acp_agents:` configuration in `config.yaml`. See the [Subagents](/docs/harness/subagents) page for ACP configuration.
@@ -84,15 +73,6 @@ Searches for tools by name or description and loads them into the agent's contex
 
 The following tools interact with the sandbox filesystem. They require a sandbox to be configured and active.
 
-| Tool          | Description                                                                       |
-| ------------- | --------------------------------------------------------------------------------- |
-| `ls`          | List files in a directory                                                         |
-| `read_file`   | Read file contents                                                                |
-| `glob`        | Find files matching a pattern                                                     |
-| `grep`        | Search file contents                                                              |
-| `write_file`  | Write content to a file                                                           |
-| `str_replace` | Replace a string in a file                                                        |
-| `bash`        | Execute a shell command (requires `allow_host_bash: true` or a container sandbox) |
 | Tool | Description |
 |---|---|
 | `ls` | List files in a directory |
@@ -113,7 +93,6 @@ tools:
   - use: deerflow.sandbox.tools:grep_tool
   - use: deerflow.sandbox.tools:write_file_tool
   - use: deerflow.sandbox.tools:str_replace_tool
-  - use: deerflow.sandbox.tools:bash_tool # requires host bash or container sandbox
   - use: deerflow.sandbox.tools:bash_tool  # requires host bash or container sandbox
 ```
 
@@ -140,7 +119,6 @@ tools:
 High-quality search with structured results. Requires a [Tavily](https://tavily.com) API key.
 
 Install: `cd backend && uv add 'deerflow-harness[tavily]'`
-
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
@@ -151,7 +129,6 @@ tools:
 Semantic search with neural retrieval. Requires an [Exa](https://exa.ai) API key.
 
 Install: `cd backend && uv add 'deerflow-harness[exa]'`
-
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
@@ -170,7 +147,6 @@ tools:
 Firecrawl-powered search and crawl. Requires a [Firecrawl](https://firecrawl.dev) API key.
 
 Install: `cd backend && uv add 'deerflow-harness[firecrawl]'`
-
   </Tabs.Tab>
 </Tabs>
 
@@ -181,17 +157,9 @@ Install: `cd backend && uv add 'deerflow-harness[firecrawl]'`
 ```yaml
 tools:
   - use: deerflow.community.jina_ai.tools:web_fetch_tool
-    api_key: $JINA_API_KEY # optional; anonymous usage has rate limits
-```
-Converts web pages to clean Markdown. Works without an API key at reduced rate
-limits.
     api_key: $JINA_API_KEY  # optional; anonymous usage has rate limits
 ```
 Converts web pages to clean Markdown. Works without an API key at reduced rate limits.
-    ```yaml tools: - use: deerflow.community.jina_ai.tools:web_fetch_tool
-    api_key: $JINA_API_KEY # optional; anonymous usage has rate limits ```
-    Converts web pages to clean Markdown. Works without an API key at reduced
-    rate limits.
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
