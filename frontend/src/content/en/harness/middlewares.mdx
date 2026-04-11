@@ -90,6 +90,7 @@ title:
   max_words: 6
   max_chars: 60
   model_name: null # use default model
+  model_name: null  # use default model
 ```
 
 ---
@@ -160,6 +161,7 @@ summarization:
   # Trigger conditions — summarization runs when ANY threshold is met
   trigger:
     - type: tokens # trigger when context exceeds N tokens
+    - type: tokens      # trigger when context exceeds N tokens
       value: 15564
     # - type: messages  # trigger when there are more than N messages
     #   value: 50
@@ -170,6 +172,7 @@ summarization:
   keep:
     type: messages
     value: 10 # keep the 10 most recent messages
+    value: 10           # keep the 10 most recent messages
     # Alternative: keep by tokens
     # type: tokens
     # value: 3000
