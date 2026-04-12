@@ -12,6 +12,7 @@ import pytest
 from deerflow.runtime.user_context import (
     DEFAULT_USER_ID,
     CurrentUser,
+    DEFAULT_USER_ID,
     get_current_user,
     get_effective_user_id,
     require_current_user,

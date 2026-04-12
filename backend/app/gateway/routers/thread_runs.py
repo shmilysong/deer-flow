@@ -344,6 +344,7 @@ async def list_run_messages(
     rows = await event_store.list_messages_by_run(
         thread_id,
         run_id,
+        thread_id, run_id,
         limit=limit + 1,
         before_seq=before_seq,
         after_seq=after_seq,
