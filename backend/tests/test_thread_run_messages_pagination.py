@@ -1,31 +1,27 @@
 """Tests for paginated GET /api/threads/{thread_id}/runs/{run_id}/messages endpoint."""
-
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from _router_auth_helpers import make_authed_test_app
 from fastapi.testclient import TestClient
 
 from app.gateway.routers import thread_runs
-from deerflow.runtime import RunManager
-from deerflow.runtime.runs.store.memory import MemoryRunStore
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_app(event_store=None, run_manager=None):
+def _make_app(event_store=None):
     """Build a test FastAPI app with stub auth and mocked state."""
     app = make_authed_test_app()
     app.include_router(thread_runs.router)
 
     if event_store is not None:
         app.state.run_event_store = event_store
-    if run_manager is not None:
-        app.state.run_manager = run_manager
 
     return app
 
@@ -39,23 +35,6 @@ def _make_event_store(rows: list[dict]):
 
 def _make_message(seq: int) -> dict:
     return {"seq": seq, "event_type": "ai_message", "category": "message", "content": f"msg-{seq}"}
-
-
-def _make_store_only_run_manager() -> RunManager:
-    store = MemoryRunStore()
-    asyncio.run(
-        store.put(
-            "store-only-run",
-            thread_id="thread-store",
-            assistant_id="lead_agent",
-            status="running",
-            multitask_strategy="reject",
-            metadata={},
-            kwargs={},
-            created_at="2026-01-01T00:00:00+00:00",
-        )
-    )
-    return RunManager(store=store)
 
 
 # ---------------------------------------------------------------------------
@@ -99,8 +78,7 @@ def test_after_seq_forwarded_to_event_store():
         response = client.get("/api/threads/thread-3/runs/run-3/messages?after_seq=5")
     assert response.status_code == 200
     event_store.list_messages_by_run.assert_awaited_once_with(
-        "thread-3",
-        "run-3",
+        "thread-3", "run-3",
         limit=51,  # default limit(50) + 1
         before_seq=None,
         after_seq=5,
@@ -116,8 +94,7 @@ def test_before_seq_forwarded_to_event_store():
         response = client.get("/api/threads/thread-4/runs/run-4/messages?before_seq=10")
     assert response.status_code == 200
     event_store.list_messages_by_run.assert_awaited_once_with(
-        "thread-4",
-        "run-4",
+        "thread-4", "run-4",
         limit=51,
         before_seq=10,
         after_seq=None,
@@ -133,8 +110,7 @@ def test_custom_limit_forwarded_to_event_store():
         response = client.get("/api/threads/thread-5/runs/run-5/messages?limit=10")
     assert response.status_code == 200
     event_store.list_messages_by_run.assert_awaited_once_with(
-        "thread-5",
-        "run-5",
+        "thread-5", "run-5",
         limit=11,  # 10 + 1
         before_seq=None,
         after_seq=None,
@@ -150,46 +126,3 @@ def test_empty_data_when_no_messages():
     body = response.json()
     assert body["data"] == []
     assert body["has_more"] is False
-
-
-def test_get_run_hydrates_store_only_run():
-    """GET /api/threads/{tid}/runs/{rid} should read historical store rows."""
-    app = _make_app(run_manager=_make_store_only_run_manager())
-    with TestClient(app) as client:
-        response = client.get("/api/threads/thread-store/runs/store-only-run")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["run_id"] == "store-only-run"
-    assert body["thread_id"] == "thread-store"
-    assert body["status"] == "running"
-
-
-def test_cancel_store_only_run_returns_409():
-    """Store-only runs are readable but not cancellable by this worker."""
-    app = _make_app(run_manager=_make_store_only_run_manager())
-    with TestClient(app) as client:
-        response = client.post("/api/threads/thread-store/runs/store-only-run/cancel")
-
-    assert response.status_code == 409
-    assert "not active on this worker" in response.json()["detail"]
-
-
-def test_join_store_only_run_returns_409():
-    """join endpoint should return 409 for store-only runs (no local stream state)."""
-    app = _make_app(run_manager=_make_store_only_run_manager())
-    with TestClient(app) as client:
-        response = client.get("/api/threads/thread-store/runs/store-only-run/join")
-
-    assert response.status_code == 409
-    assert "not active on this worker" in response.json()["detail"]
-
-
-def test_stream_store_only_run_returns_409():
-    """stream endpoint (action=None) should return 409 for store-only runs."""
-    app = _make_app(run_manager=_make_store_only_run_manager())
-    with TestClient(app) as client:
-        response = client.get("/api/threads/thread-store/runs/store-only-run/stream")
-
-    assert response.status_code == 409
-    assert "not active on this worker" in response.json()["detail"]

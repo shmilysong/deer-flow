@@ -1,7 +1,7 @@
 """Middleware for memory mechanism."""
 
 import logging
-from typing import TYPE_CHECKING, override
+from typing import override
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
@@ -12,9 +12,6 @@ from deerflow.agents.memory.message_processing import detect_correction, detect_
 from deerflow.agents.memory.queue import get_memory_queue
 from deerflow.config.memory_config import get_memory_config
 from deerflow.runtime.user_context import get_effective_user_id
-
-if TYPE_CHECKING:
-    from deerflow.config.memory_config import MemoryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +34,14 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
 
     state_schema = MemoryMiddlewareState
 
-    def __init__(self, agent_name: str | None = None, *, memory_config: "MemoryConfig | None" = None):
+    def __init__(self, agent_name: str | None = None):
         """Initialize the MemoryMiddleware.
 
         Args:
             agent_name: If provided, memory is stored per-agent. If None, uses global memory.
-            memory_config: Explicit memory config. When omitted, legacy global
-                config fallback is used.
         """
         super().__init__()
         self._agent_name = agent_name
-        self._memory_config = memory_config
 
     @override
     def after_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
@@ -60,7 +54,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         Returns:
             None (no state changes needed from this middleware).
         """
-        config = self._memory_config or get_memory_config()
+        config = get_memory_config()
         if not config.enabled:
             return None
 

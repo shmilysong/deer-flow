@@ -1,8 +1,6 @@
 """Tests for user-scoped path resolution in Paths."""
-
-from pathlib import Path
-
 import pytest
+from pathlib import Path
 
 from deerflow.config.paths import Paths
 
@@ -48,21 +46,6 @@ class TestUserAgentMemoryFile:
     def test_user_agent_memory_file_lowercases_name(self, paths: Paths):
         expected = paths.base_dir / "users" / "bob" / "agents" / "myagent" / "memory.json"
         assert paths.user_agent_memory_file("bob", "MyAgent") == expected
-
-
-class TestUserAgentDir:
-    def test_user_agents_dir(self, paths: Paths):
-        assert paths.user_agents_dir("alice") == paths.base_dir / "users" / "alice" / "agents"
-
-    def test_user_agent_dir(self, paths: Paths):
-        assert paths.user_agent_dir("alice", "code-reviewer") == paths.base_dir / "users" / "alice" / "agents" / "code-reviewer"
-
-    def test_user_agent_dir_lowercases_name(self, paths: Paths):
-        assert paths.user_agent_dir("alice", "CodeReviewer") == paths.base_dir / "users" / "alice" / "agents" / "codereviewer"
-
-    def test_user_agent_dir_validates_user_id(self, paths: Paths):
-        with pytest.raises(ValueError, match="Invalid user_id"):
-            paths.user_agent_dir("../escape", "myagent")
 
 
 class TestUserThreadDir:
