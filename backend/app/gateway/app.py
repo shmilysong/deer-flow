@@ -51,11 +51,6 @@ _SHUTDOWN_HOOK_TIMEOUT_SECONDS = 5.0
 async def _ensure_admin_user(app: FastAPI) -> None:
     """Startup hook: handle first boot and migrate orphan threads otherwise.
 
-    After admin creation, migrate orphan threads from the LangGraph
-    store (metadata.user_id unset) to the admin account. This is the
-    "no-auth → with-auth" upgrade path: users who ran DeerFlow without
-    authentication have existing LangGraph thread data that needs an
-    owner assigned.
     First boot (no admin exists):
       - Generates a one-time ``init_token`` stored in ``app.state.init_token``
       - Logs the token to stdout so the operator can copy-paste it into the
@@ -122,8 +117,6 @@ async def _ensure_admin_user(app: FastAPI) -> None:
     admin_id = str(row.id)
 
     # LangGraph store orphan migration — non-fatal.
-    # This covers the "no-auth → with-auth" upgrade path for users
-    # whose existing LangGraph thread metadata has no user_id set.
     store = getattr(app.state, "store", None)
     if store is not None:
         try:
