@@ -66,7 +66,7 @@ class FileMemoryStorage(MemoryStorage):
         """Initialize the file memory storage."""
         # Per-user/agent memory cache: keyed by (user_id, agent_name) tuple (None = global)
         # Value: (memory_data, file_mtime)
-        self._memory_cache: dict[tuple[str | None, str | None], tuple[dict[str, Any], float | None]] = {}
+        self._memory_cache: dict[str | None, tuple[dict[str, Any], float | None]] = {}
         # Guards all reads and writes to _memory_cache across concurrent callers.
         self._cache_lock = threading.Lock()
 
@@ -131,14 +131,16 @@ class FileMemoryStorage(MemoryStorage):
             current_mtime = None
 
         with self._cache_lock:
-            cached = self._memory_cache.get(cache_key)
+            cached = self._memory_cache.get(agent_name)
             if cached is not None and cached[1] == current_mtime:
                 return cached[0]
 
-        memory_data = self._load_memory_from_file(agent_name, user_id=user_id)
+        memory_data = self._load_memory_from_file(agent_name)
 
         with self._cache_lock:
-            self._memory_cache[cache_key] = (memory_data, current_mtime)
+            self._memory_cache[agent_name] = (memory_data, current_mtime)
+
+        return memory_data
 
         return memory_data
 
@@ -154,7 +156,7 @@ class FileMemoryStorage(MemoryStorage):
             mtime = None
 
         with self._cache_lock:
-            self._memory_cache[cache_key] = (memory_data, mtime)
+            self._memory_cache[agent_name] = (memory_data, mtime)
         return memory_data
 
     def save(self, memory_data: dict[str, Any], agent_name: str | None = None, *, user_id: str | None = None) -> bool:
@@ -181,7 +183,7 @@ class FileMemoryStorage(MemoryStorage):
                 mtime = None
 
             with self._cache_lock:
-                self._memory_cache[cache_key] = (memory_data, mtime)
+                self._memory_cache[agent_name] = (memory_data, mtime)
             logger.info("Memory saved to %s", file_path)
             return True
         except OSError as e:

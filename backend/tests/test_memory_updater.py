@@ -948,6 +948,11 @@ class TestFinalizeCacheIsolation:
 
         saved_objects: list[dict] = []
         save_mock = MagicMock(side_effect=lambda m, a=None, **_: saved_objects.append(m) or False)  # always fails
+        mock_model = AsyncMock()
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        saved_objects: list[dict] = []
+        save_mock = MagicMock(side_effect=lambda m, a=None: saved_objects.append(m) or False)  # always fails
 
         with (
             patch.object(updater, "_get_model", return_value=mock_model),
@@ -1046,3 +1051,6 @@ class TestUserIdForwarding:
         mock_load.assert_called_once_with(None, user_id="user-99")
         save_call = mock_storage.save.call_args
         assert save_call.kwargs.get("user_id") == "user-99" or (len(save_call.args) > 2 and save_call.args[2] == "user-99")
+        # original_memory must not have been mutated — deepcopy isolates the mutation
+        assert len(original_memory["facts"]) == 1, "original_memory must not be mutated by _apply_updates"
+        assert original_memory["facts"][0]["content"] == "original"
