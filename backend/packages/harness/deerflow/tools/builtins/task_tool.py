@@ -166,6 +166,9 @@ async def task_tool(
         available_tools_kwargs["app_config"] = resolved_app_config
     tools = get_available_tools(**available_tools_kwargs)
 
+    # Subagents should not have subagent tools enabled (prevent recursive nesting)
+    tools = get_available_tools(model_name=parent_model, groups=parent_tool_groups, subagent_enabled=False)
+
     # Create executor
     executor_kwargs = {
         "config": config,
