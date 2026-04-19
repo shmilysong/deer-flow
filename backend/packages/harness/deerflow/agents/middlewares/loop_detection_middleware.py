@@ -379,6 +379,13 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             last_msg = messages[-1]
             patched_msg = last_msg.model_copy(update={"content": self._append_text(last_msg.content, warning)})
             return {"messages": [patched_msg]}
+            # Inject as HumanMessage instead of SystemMessage to avoid
+            # Anthropic's "multiple non-consecutive system messages" error.
+            # Anthropic models require system messages only at the start of
+            # the conversation; injecting one mid-conversation crashes
+            # langchain_anthropic's _format_messages(). HumanMessage works
+            # with all providers. See #1299.
+            return {"messages": [HumanMessage(content=warning, name="loop_warning")]}
 
         return None
 

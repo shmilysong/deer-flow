@@ -2,6 +2,7 @@ import type { Message } from "@langchain/langgraph-sdk";
 import type { BaseStream } from "@langchain/langgraph-sdk/react";
 import { ChevronUpIcon, Loader2Icon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import {
   Conversation,
@@ -160,6 +161,7 @@ export function MessageList({
   thread,
   paddingBottom = MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   tokenUsageInlineMode = "off",
+  tokenUsageEnabled = false,
   hasMoreHistory,
   loadMoreHistory,
   isHistoryLoading,
@@ -169,6 +171,7 @@ export function MessageList({
   thread: BaseStream<AgentThreadState>;
   paddingBottom?: number;
   tokenUsageInlineMode?: TokenUsageInlineMode;
+  tokenUsageEnabled?: boolean;
   hasMoreHistory?: boolean;
   loadMoreHistory?: () => void;
   isHistoryLoading?: boolean;
@@ -297,6 +300,19 @@ export function MessageList({
                   renderAssistantCopyButton(group.messages)}
               </div>
             );
+        {groupMessages(messages, (group) => {
+          if (group.type === "human" || group.type === "assistant") {
+            return group.messages.map((msg) => {
+              return (
+                <MessageListItem
+                  key={`${group.id}/${msg.id}`}
+                  threadId={threadId}
+                  message={msg}
+                  isLoading={thread.isLoading}
+                  tokenUsageEnabled={tokenUsageEnabled}
+                />
+              );
+            });
           } else if (group.type === "assistant:clarification") {
             const message = group.messages[0];
             if (message && hasContent(message)) {

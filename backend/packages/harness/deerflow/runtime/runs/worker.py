@@ -246,6 +246,15 @@ async def run_agent(
         runtime_ctx = _build_runtime_context(thread_id, run_id, config.get("context"), ctx.app_config)
         _install_runtime_context(config, runtime_ctx)
         runtime = Runtime(context=cast(Any, runtime_ctx), store=store)
+        # Inject runtime context so middlewares can access thread_id
+        # (langgraph-cli does this automatically; we must do it manually)
+        runtime = Runtime(context={"thread_id": thread_id, "run_id": run_id}, store=store)
+        # If the caller already set a ``context`` key (LangGraph >= 0.6.0
+        # prefers it over ``configurable`` for thread-level data), make
+        # sure ``thread_id`` is available there too.
+        if "context" in config and isinstance(config["context"], dict):
+            config["context"].setdefault("thread_id", thread_id)
+            config["context"].setdefault("run_id", run_id)
         config.setdefault("configurable", {})["__pregel_runtime"] = runtime
 
         # Inject RunJournal as a LangChain callback handler.

@@ -74,6 +74,7 @@ class RunJournal(BaseCallbackHandler):
         # LLM request/response tracking
         self._llm_call_index = 0
         self._seen_llm_starts: set[str] = set()  # langchain run_ids that fired on_chat_model_start
+        self._cached_prompts: dict[str, list[dict]] = {}  # langchain run_id -> OpenAI messages
 
     # -- Lifecycle callbacks --
 
@@ -146,6 +147,15 @@ class RunJournal(BaseCallbackHandler):
         if not self._first_human_msg and messages:
             for batch in reversed(messages):
                 for m in reversed(batch):
+        # Mark this run_id as seen so on_llm_end knows not to increment again.
+        self._cached_prompts[rid] = []
+
+        logger.info(f"on_chat_model_start {run_id}: tags={tags} serialized={serialized} messages={messages}")
+
+        # Capture the first human message sent to any LLM in this run.
+        if not self._first_human_msg:
+            for batch in messages.reversed():
+                for m in batch.reversed():
                     if isinstance(m, HumanMessage) and m.name != "summary":
                         caller = self._identify_caller(tags)
                         self.set_first_human_message(m.text)
@@ -174,6 +184,9 @@ class RunJournal(BaseCallbackHandler):
     ) -> None:
         messages: list[AnyMessage] = []
         logger.debug("on_llm_end %s: tags=%s", run_id, tags)
+    def on_llm_end(self, response, *, run_id, parent_run_id, tags, **kwargs) -> None:
+        messages: list[AnyMessage] = []
+        logger.info(f"on_llm_end {run_id}: response: {tags} {kwargs}")
         for generation in response.generations:
             for gen in generation:
                 if hasattr(gen, "message"):
@@ -200,6 +213,10 @@ class RunJournal(BaseCallbackHandler):
                 self._llm_call_index += 1
                 call_index = self._llm_call_index
                 self._seen_llm_starts.add(rid)
+            if rid not in self._cached_prompts:
+                # Fallback: on_chat_model_start was not called
+                self._llm_call_index += 1
+                call_index = self._llm_call_index
 
             # Trace event: llm_response (OpenAI completion format)
             self._put(
@@ -235,6 +252,7 @@ class RunJournal(BaseCallbackHandler):
         """Handle tool start event, cache tool call ID for later correlation"""
         tool_call_id = str(run_id)
         logger.debug("Tool start for node %s, tool_call_id=%s, tags=%s", run_id, tool_call_id, tags)
+        logger.info(f"Tool start for node {run_id}, tool_call_id={tool_call_id}, tags={tags}, metadata={metadata}")
 
     def on_tool_end(self, output, *, run_id, parent_run_id=None, **kwargs):
         """Handle tool end event, append message and clear node data"""
@@ -254,6 +272,7 @@ class RunJournal(BaseCallbackHandler):
                 logger.warning(f"on_tool_end {run_id}: output is not ToolMessage: {type(output)}")
         finally:
             logger.debug("Tool end for node %s", run_id)
+            logger.info(f"Tool end for node {run_id}")
 
     # -- Internal methods --
 
@@ -320,6 +339,8 @@ class RunJournal(BaseCallbackHandler):
 
     def _identify_caller(self, tags: list[str] | None) -> str:
         _tags = tags or []
+    def _identify_caller(self, tags: list[str] | None, **kwargs) -> str:
+        _tags = tags or kwargs.get("tags", [])
         for tag in _tags:
             if isinstance(tag, str) and (tag.startswith("subagent:") or tag.startswith("middleware:") or tag == "lead_agent"):
                 return tag
