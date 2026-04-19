@@ -48,6 +48,7 @@ def _enable_stream_usage_by_default(model_use_path: str, model_settings_from_con
 
 
 def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *, app_config: AppConfig | None = None, **kwargs) -> BaseChatModel:
+def create_chat_model(name: str | None = None, thinking_enabled: bool = False, **kwargs) -> BaseChatModel:
     """Create a chat model instance from the config.
 
     Args:
