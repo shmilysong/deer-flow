@@ -3,29 +3,26 @@ import logging
 import yaml
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
+from langgraph.prebuilt import ToolRuntime
 from langgraph.types import Command
 
 from deerflow.config.agents_config import validate_agent_name
 from deerflow.config.paths import get_paths
-from deerflow.runtime.user_context import resolve_runtime_user_id
-from deerflow.tools.types import Runtime
 
 logger = logging.getLogger(__name__)
 
 
-@tool(parse_docstring=True)
+@tool
 def setup_agent(
     soul: str,
     description: str,
-    runtime: Runtime,
-    skills: list[str] | None = None,
+    runtime: ToolRuntime,
 ) -> Command:
     """Setup the custom DeerFlow agent.
 
     Args:
         soul: Full SOUL.md content defining the agent's personality and behavior.
         description: One-line description of what the agent does.
-        skills: Optional list of skill names this agent should use. None means use all enabled skills, empty list means no skills.
     """
 
     agent_name: str | None = runtime.context.get("agent_name") if runtime.context else None
@@ -35,14 +32,7 @@ def setup_agent(
     try:
         agent_name = validate_agent_name(agent_name)
         paths = get_paths()
-        if agent_name:
-            # Custom agents are persisted under the current user's bucket so
-            # different users do not see each other's agents.
-            user_id = resolve_runtime_user_id(runtime)
-            agent_dir = paths.user_agent_dir(user_id, agent_name)
-        else:
-            # Default agent (no agent_name): SOUL.md lives at the global base dir.
-            agent_dir = paths.base_dir
+        agent_dir = paths.agent_dir(agent_name) if agent_name else paths.base_dir
         is_new_dir = not agent_dir.exists()
         agent_dir.mkdir(parents=True, exist_ok=True)
 
@@ -51,8 +41,6 @@ def setup_agent(
             config_data: dict = {"name": agent_name}
             if description:
                 config_data["description"] = description
-            if skills is not None:
-                config_data["skills"] = skills
 
             config_file = agent_dir / "config.yaml"
             with open(config_file, "w", encoding="utf-8") as f:
