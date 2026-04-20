@@ -86,6 +86,10 @@ class TestSetupAgentNoDataLoss:
         agent_dir.mkdir(parents=True)
         old_soul = agent_dir / "SOUL.md"
         old_soul.write_text("original soul content", encoding="utf-8")
+        agent_dir = tmp_path / "agents" / "test-agent"
+        agent_dir.mkdir(parents=True)
+        old_soul = agent_dir / "SOUL.md"
+        old_soul.write_text("original soul content")
 
         with patch("deerflow.tools.builtins.setup_agent_tool.get_paths", return_value=_make_paths_mock(tmp_path)):
             # Force soul_file.write_text to raise after directory already exists
@@ -105,6 +109,7 @@ class TestSetupAgentNoDataLoss:
         """If the agent directory is newly created and setup fails,
         the directory should be cleaned up."""
         agent_dir = tmp_path / "users" / "test-user-autouse" / "agents" / "test-agent"
+        agent_dir = tmp_path / "agents" / "test-agent"
         assert not agent_dir.exists()
 
         with patch("deerflow.tools.builtins.setup_agent_tool.get_paths", return_value=_make_paths_mock(tmp_path)):
@@ -123,6 +128,7 @@ class TestSetupAgentNoDataLoss:
         _call_setup_agent(tmp_path, soul="# My Agent", description="A test agent")
 
         agent_dir = tmp_path / "users" / "test-user-autouse" / "agents" / "test-agent"
+        agent_dir = tmp_path / "agents" / "test-agent"
         assert agent_dir.exists()
         assert (agent_dir / "SOUL.md").read_text() == "# My Agent"
         assert (agent_dir / "config.yaml").exists()

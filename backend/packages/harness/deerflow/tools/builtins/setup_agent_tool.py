@@ -43,6 +43,7 @@ def setup_agent(
         else:
             # Default agent (no agent_name): SOUL.md lives at the global base dir.
             agent_dir = paths.base_dir
+        agent_dir = paths.agent_dir(agent_name) if agent_name else paths.base_dir
         is_new_dir = not agent_dir.exists()
         agent_dir.mkdir(parents=True, exist_ok=True)
 
