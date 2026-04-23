@@ -30,6 +30,14 @@ try:
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
 
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.history import InMemoryHistory
+
+    _HAS_PROMPT_TOOLKIT = True
+except ImportError:
+    _HAS_PROMPT_TOOLKIT = False
+
 load_dotenv()
 
 _LOG_FMT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
