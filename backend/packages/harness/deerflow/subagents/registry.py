@@ -20,6 +20,7 @@ def _resolve_subagents_app_config(app_config: Any | None = None):
 
 
 def _build_custom_subagent_config(name: str, *, app_config: Any | None = None) -> SubagentConfig | None:
+def _build_custom_subagent_config(name: str) -> SubagentConfig | None:
     """Build a SubagentConfig from config.yaml custom_agents section.
 
     Args:
@@ -31,6 +32,10 @@ def _build_custom_subagent_config(name: str, *, app_config: Any | None = None) -
     """
     subagents_config = _resolve_subagents_app_config(app_config)
     custom = subagents_config.custom_agents.get(name)
+    from deerflow.config.subagents_config import get_subagents_app_config
+
+    app_config = get_subagents_app_config()
+    custom = app_config.custom_agents.get(name)
     if custom is None:
         return None
 
@@ -48,6 +53,7 @@ def _build_custom_subagent_config(name: str, *, app_config: Any | None = None) -
 
 
 def get_subagent_config(name: str, *, app_config: Any | None = None) -> SubagentConfig | None:
+def get_subagent_config(name: str) -> SubagentConfig | None:
     """Get a subagent configuration by name, with config.yaml overrides applied.
 
     Resolution order (mirrors Codex's config layering):
@@ -66,6 +72,7 @@ def get_subagent_config(name: str, *, app_config: Any | None = None) -> Subagent
     config = BUILTIN_SUBAGENTS.get(name)
     if config is None:
         config = _build_custom_subagent_config(name, app_config=app_config)
+        config = _build_custom_subagent_config(name)
     if config is None:
         return None
 
@@ -77,6 +84,12 @@ def get_subagent_config(name: str, *, app_config: Any | None = None) -> Subagent
     subagents_config = _resolve_subagents_app_config(app_config)
     is_builtin = name in BUILTIN_SUBAGENTS
     agent_override = subagents_config.agents.get(name)
+    # Lazy import to avoid circular deps.
+    from deerflow.config.subagents_config import get_subagents_app_config
+
+    app_config = get_subagents_app_config()
+    is_builtin = name in BUILTIN_SUBAGENTS
+    agent_override = app_config.agents.get(name)
 
     overrides = {}
 
@@ -88,6 +101,9 @@ def get_subagent_config(name: str, *, app_config: Any | None = None) -> Subagent
     elif is_builtin and subagents_config.timeout_seconds != config.timeout_seconds:
         logger.debug("Subagent '%s': timeout from global default (%ss -> %ss)", name, config.timeout_seconds, subagents_config.timeout_seconds)
         overrides["timeout_seconds"] = subagents_config.timeout_seconds
+    elif is_builtin and app_config.timeout_seconds != config.timeout_seconds:
+        logger.debug("Subagent '%s': timeout from global default (%ss -> %ss)", name, config.timeout_seconds, app_config.timeout_seconds)
+        overrides["timeout_seconds"] = app_config.timeout_seconds
 
     # Max turns: per-agent override > global default (builtins only) > config's own value
     if agent_override is not None and agent_override.max_turns is not None:
@@ -100,12 +116,19 @@ def get_subagent_config(name: str, *, app_config: Any | None = None) -> Subagent
 
     # Model: per-agent override only (no global default for model)
     effective_model = subagents_config.get_model_for(name)
+    elif is_builtin and app_config.max_turns is not None and app_config.max_turns != config.max_turns:
+        logger.debug("Subagent '%s': max_turns from global default (%s -> %s)", name, config.max_turns, app_config.max_turns)
+        overrides["max_turns"] = app_config.max_turns
+
+    # Model: per-agent override only (no global default for model)
+    effective_model = app_config.get_model_for(name)
     if effective_model is not None and effective_model != config.model:
         logger.debug("Subagent '%s': model overridden (%s -> %s)", name, config.model, effective_model)
         overrides["model"] = effective_model
 
     # Skills: per-agent override only (no global default for skills)
     effective_skills = subagents_config.get_skills_for(name)
+    effective_skills = app_config.get_skills_for(name)
     if effective_skills is not None and effective_skills != config.skills:
         logger.debug("Subagent '%s': skills overridden (%s -> %s)", name, config.skills, effective_skills)
         overrides["skills"] = effective_skills
@@ -125,12 +148,15 @@ def list_subagents(*, app_config: Any | None = None) -> list[SubagentConfig]:
     configs = []
     for name in get_subagent_names(app_config=app_config):
         config = get_subagent_config(name, app_config=app_config)
+    for name in get_subagent_names():
+        config = get_subagent_config(name)
         if config is not None:
             configs.append(config)
     return configs
 
 
 def get_subagent_names(*, app_config: Any | None = None) -> list[str]:
+def get_subagent_names() -> list[str]:
     """Get all available subagent names (built-in + custom).
 
     Returns:
@@ -141,6 +167,10 @@ def get_subagent_names(*, app_config: Any | None = None) -> list[str]:
     # Merge custom_agents from config.yaml
     subagents_config = _resolve_subagents_app_config(app_config)
     for custom_name in subagents_config.custom_agents:
+    from deerflow.config.subagents_config import get_subagents_app_config
+
+    app_config = get_subagents_app_config()
+    for custom_name in app_config.custom_agents:
         if custom_name not in names:
             names.append(custom_name)
 
@@ -154,6 +184,7 @@ def get_available_subagent_names(*, app_config: Any | None = None) -> list[str]:
         List of subagent names visible to the current sandbox configuration.
     """
     names = get_subagent_names(app_config=app_config)
+    names = get_subagent_names()
     try:
         host_bash_allowed = is_host_bash_allowed(app_config) if hasattr(app_config, "sandbox") else is_host_bash_allowed()
     except Exception:

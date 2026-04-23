@@ -323,6 +323,7 @@ class SubagentExecutor:
         return filter_tools_by_skill_allowed_tools(self._base_tools, skills)
 
     async def _load_skill_messages(self, skills: list[Skill]) -> list[SystemMessage]:
+    async def _load_skill_messages(self) -> list[SystemMessage]:
         """Load skill content as conversation items based on config.skills.
 
         Aligned with Codex's pattern: each subagent loads its own skills
@@ -336,6 +337,31 @@ class SubagentExecutor:
         Returns:
             List of SystemMessages containing skill content.
         """
+        if self.config.skills is not None and len(self.config.skills) == 0:
+            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} skills=[] — skipping skill loading")
+            return []
+
+        try:
+            from deerflow.skills.loader import load_skills
+
+            # Use asyncio.to_thread to avoid blocking the event loop (LangGraph ASGI requirement)
+            all_skills = await asyncio.to_thread(load_skills, enabled_only=True)
+            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} loaded {len(all_skills)} enabled skills from disk")
+        except Exception:
+            logger.warning(f"[trace={self.trace_id}] Failed to load skills for subagent {self.config.name}", exc_info=True)
+            return []
+
+        if not all_skills:
+            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} no enabled skills found")
+            return []
+
+        # Filter by config.skills whitelist
+        if self.config.skills is not None:
+            allowed = set(self.config.skills)
+            skills = [s for s in all_skills if s.name in allowed]
+        else:
+            skills = all_skills
+
         if not skills:
             return []
 
@@ -354,6 +380,7 @@ class SubagentExecutor:
         return messages
 
     async def _build_initial_state(self, task: str) -> tuple[dict[str, Any], list[BaseTool]]:
+    async def _build_initial_state(self, task: str) -> dict[str, Any]:
         """Build the initial state for agent execution.
 
         Args:
@@ -368,6 +395,9 @@ class SubagentExecutor:
         skill_messages = await self._load_skill_messages(skills)
 
         messages: list[Any] = []
+        skill_messages = await self._load_skill_messages()
+
+        messages: list = []
         # Skill content injected as developer/system messages before the task
         messages.extend(skill_messages)
         # Then the actual task
@@ -415,6 +445,8 @@ class SubagentExecutor:
         try:
             state, filtered_tools = await self._build_initial_state(task)
             agent = self._create_agent(filtered_tools)
+            agent = self._create_agent()
+            state = await self._build_initial_state(task)
 
             # Build config with thread_id for sandbox access and recursion limit
             run_config: RunnableConfig = {

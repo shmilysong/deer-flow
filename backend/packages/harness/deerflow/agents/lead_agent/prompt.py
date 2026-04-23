@@ -182,6 +182,7 @@ Skip simple one-off tasks.
 
 
 def _build_available_subagents_description(available_names: list[str], bash_available: bool, *, app_config: AppConfig | None = None) -> str:
+def _build_available_subagents_description(available_names: list[str], bash_available: bool) -> str:
     """Dynamically build subagent type descriptions from registry.
 
     Mirrors Codex's pattern where agent_type_description is dynamically generated
@@ -204,6 +205,7 @@ def _build_available_subagents_description(available_names: list[str], bash_avai
             lines.append(f"- **{name}**: {builtin_descriptions[name]}")
         else:
             config = get_subagent_config(name, app_config=app_config)
+            config = get_subagent_config(name)
             if config is not None:
                 desc = config.description.split("\n")[0].strip()  # First line only for brevity
                 lines.append(f"- **{name}**: {desc}")
@@ -212,6 +214,7 @@ def _build_available_subagents_description(available_names: list[str], bash_avai
 
 
 def _build_subagent_section(max_concurrent: int, *, app_config: AppConfig | None = None) -> str:
+def _build_subagent_section(max_concurrent: int) -> str:
     """Build the subagent system prompt section with dynamic concurrency limit.
 
     Args:
@@ -222,11 +225,13 @@ def _build_subagent_section(max_concurrent: int, *, app_config: AppConfig | None
     """
     n = max_concurrent
     available_names = get_available_subagent_names(app_config=app_config) if app_config is not None else get_available_subagent_names()
+    available_names = get_available_subagent_names()
     bash_available = "bash" in available_names
 
     # Dynamically build subagent type descriptions from registry (aligned with Codex's
     # agent_type_description pattern where all registered roles are listed in the tool spec).
     available_subagents = _build_available_subagents_description(available_names, bash_available, app_config=app_config)
+    available_subagents = _build_available_subagents_description(available_names, bash_available)
     direct_tool_examples = "bash, ls, read_file, web_search, etc." if bash_available else "ls, read_file, web_search, etc."
     direct_execution_example = (
         '# User asks: "Run the tests"\n# Thinking: Cannot decompose into parallel sub-tasks\n# → Execute directly\n\nbash("npm test")  # Direct execution, not task()'
