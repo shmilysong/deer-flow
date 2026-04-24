@@ -130,6 +130,7 @@ async def generate_suggestions(
 
     try:
         model = create_chat_model(name=body.model_name, thinking_enabled=False, app_config=config)
+        model = create_chat_model(name=request.model_name, thinking_enabled=False)
         response = await model.ainvoke([SystemMessage(content=system_instruction), HumanMessage(content=user_content)], config={"run_name": "suggest_agent"})
         raw = _extract_response_text(response.content)
         suggestions = _parse_json_string_list(raw) or []

@@ -599,6 +599,8 @@ class TestUpdateMemoryStructuredResponse:
         # aupdate_memory delegates to sync path — model.invoke, not ainvoke
         model.invoke.assert_called_once()
         model.ainvoke.assert_not_called()
+        model.ainvoke.assert_awaited_once()
+        assert model.ainvoke.await_args.kwargs["config"] == {"run_name": "memory_agent"}
 
     def test_correction_hint_injected_when_detected(self):
         updater = MemoryUpdater()
