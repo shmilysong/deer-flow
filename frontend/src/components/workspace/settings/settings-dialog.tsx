@@ -158,6 +158,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
           <ScrollArea className="h-full min-h-0 rounded-lg border">
             <div className="space-y-8 p-6">
               {activeSection === "account" && <AccountSettingsPage />}
+          <ScrollArea className="h-full min-h-0 min-w-0 rounded-lg border">
+            <div className="min-w-0 space-y-8 p-6">
               {activeSection === "appearance" && <AppearanceSettingsPage />}
               {activeSection === "memory" && <MemorySettingsPage />}
               {activeSection === "tools" && <ToolSettingsPage />}
