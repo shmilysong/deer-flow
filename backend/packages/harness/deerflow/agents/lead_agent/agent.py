@@ -36,6 +36,7 @@ def _get_runtime_config(config: RunnableConfig) -> dict:
 
 
 def _resolve_model_name(requested_model_name: str | None = None, *, app_config: AppConfig | None = None) -> str:
+def _resolve_model_name(requested_model_name: str | None = None) -> str:
     """Resolve a runtime model name safely, falling back to default if invalid. Returns None if no models are configured."""
     app_config = app_config or get_app_config()
     default_model_name = app_config.models[0].name if app_config.models else None
