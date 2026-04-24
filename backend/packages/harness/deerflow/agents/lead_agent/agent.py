@@ -100,6 +100,11 @@ def _create_summarization_middleware(*, app_config: AppConfig | None = None) -> 
     # the sole entry point for DeerFlowSummarizationMiddleware, and the runtime
     # config is not expected to change after startup.
     skills_container_path = resolved_app_config.skills.container_path or "/mnt/skills"
+    try:
+        skills_container_path = get_app_config().skills.container_path or "/mnt/skills"
+    except Exception:
+        logger.exception("Failed to resolve skills container path; falling back to default")
+        skills_container_path = "/mnt/skills"
 
     return DeerFlowSummarizationMiddleware(
         **kwargs,
