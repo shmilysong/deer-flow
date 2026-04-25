@@ -149,6 +149,7 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             model_settings_from_config["stream_usage"] = True
 
     model_instance = model_class(**kwargs, **model_settings_from_config)
+    model_instance = model_class(**{**model_settings_from_config, **kwargs})
 
     callbacks = build_tracing_callbacks()
     if callbacks:
