@@ -75,6 +75,7 @@ def test_upload_files_skips_acquire_when_thread_data_is_mounted(tmp_path):
     ):
         file = UploadFile(filename="notes.txt", file=BytesIO(b"hello uploads"))
         result = asyncio.run(call_unwrapped(uploads.upload_files, "thread-mounted", request=MagicMock(), files=[file], config=SimpleNamespace()))
+        result = asyncio.run(call_unwrapped(uploads.upload_files, "thread-mounted", request=MagicMock(), files=[file]))
 
     assert result.success is True
     assert (thread_uploads_dir / "notes.txt").read_bytes() == b"hello uploads"
@@ -101,6 +102,7 @@ def test_upload_files_does_not_auto_convert_documents_by_default(tmp_path):
     ):
         file = UploadFile(filename="report.pdf", file=BytesIO(b"pdf-bytes"))
         result = asyncio.run(call_unwrapped(uploads.upload_files, "thread-local", request=MagicMock(), files=[file], config=SimpleNamespace()))
+        result = asyncio.run(call_unwrapped(uploads.upload_files, "thread-local", request=MagicMock(), files=[file]))
 
     assert result.success is True
     assert len(result.files) == 1

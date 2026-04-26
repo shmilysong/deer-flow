@@ -66,7 +66,7 @@ class FileMemoryStorage(MemoryStorage):
         """Initialize the file memory storage."""
         # Per-user/agent memory cache: keyed by (user_id, agent_name) tuple (None = global)
         # Value: (memory_data, file_mtime)
-        self._memory_cache: dict[str | None, tuple[dict[str, Any], float | None]] = {}
+        self._memory_cache: dict[tuple[str | None, str | None], tuple[dict[str, Any], float | None]] = {}
         # Guards all reads and writes to _memory_cache across concurrent callers.
         self._cache_lock = threading.Lock()
 
@@ -127,6 +127,7 @@ class FileMemoryStorage(MemoryStorage):
     def load(self, agent_name: str | None = None, *, user_id: str | None = None) -> dict[str, Any]:
         """Load memory data (cached with file modification time check)."""
         file_path = self._get_memory_file_path(agent_name, user_id=user_id)
+        cache_key = self._cache_key(agent_name, user_id=user_id)
 
         try:
             current_mtime = file_path.stat().st_mtime if file_path.exists() else None
@@ -134,14 +135,14 @@ class FileMemoryStorage(MemoryStorage):
             current_mtime = None
 
         with self._cache_lock:
-            cached = self._memory_cache.get(agent_name)
+            cached = self._memory_cache.get(cache_key)
             if cached is not None and cached[1] == current_mtime:
                 return cached[0]
 
-        memory_data = self._load_memory_from_file(agent_name)
+        memory_data = self._load_memory_from_file(agent_name, user_id=user_id)
 
         with self._cache_lock:
-            self._memory_cache[agent_name] = (memory_data, current_mtime)
+            self._memory_cache[cache_key] = (memory_data, current_mtime)
 
         return memory_data
 
@@ -159,7 +160,7 @@ class FileMemoryStorage(MemoryStorage):
             mtime = None
 
         with self._cache_lock:
-            self._memory_cache[agent_name] = (memory_data, mtime)
+            self._memory_cache[cache_key] = (memory_data, mtime)
         return memory_data
 
     def save(self, memory_data: dict[str, Any], agent_name: str | None = None, *, user_id: str | None = None) -> bool:
@@ -186,7 +187,7 @@ class FileMemoryStorage(MemoryStorage):
                 mtime = None
 
             with self._cache_lock:
-                self._memory_cache[agent_name] = (memory_data, mtime)
+                self._memory_cache[cache_key] = (memory_data, mtime)
             logger.info("Memory saved to %s", file_path)
             return True
         except OSError as e:

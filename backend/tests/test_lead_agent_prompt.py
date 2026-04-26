@@ -32,6 +32,15 @@ def test_build_self_update_section_present_for_custom_agent():
     assert "update_agent" in section
 
 
+def _set_skills_cache_state(*, skills=None, active=False, version=0):
+    prompt_module._get_cached_skills_prompt_section.cache_clear()
+    with prompt_module._enabled_skills_lock:
+        prompt_module._enabled_skills_cache = skills
+        prompt_module._enabled_skills_refresh_active = active
+        prompt_module._enabled_skills_refresh_version = version
+        prompt_module._enabled_skills_refresh_event.clear()
+
+
 def test_build_custom_mounts_section_returns_empty_when_no_mounts(monkeypatch):
     config = SimpleNamespace(sandbox=SimpleNamespace(mounts=[]))
     monkeypatch.setattr("deerflow.config.get_app_config", lambda: config)
@@ -243,7 +252,7 @@ def test_refresh_skills_system_prompt_cache_async_reloads_immediately(monkeypatc
     monkeypatch.setattr(prompt_module, "get_or_new_skill_storage", lambda **kwargs: __import__("types").SimpleNamespace(load_skills=lambda *, enabled_only: list(state["skills"])))
     _set_skills_cache_state()
     monkeypatch.setattr(prompt_module, "load_skills", lambda enabled_only=True: list(state["skills"]))
-    prompt_module.clear_skills_system_prompt_cache()
+    _set_skills_cache_state()
 
     try:
         prompt_module.warm_enabled_skills_cache()
@@ -351,7 +360,7 @@ def test_clear_cache_does_not_spawn_parallel_refresh_workers(monkeypatch, tmp_pa
     monkeypatch.setattr(prompt_module, "get_or_new_skill_storage", lambda **kwargs: __import__("types").SimpleNamespace(load_skills=lambda *, enabled_only: fake_load_skills(enabled_only=enabled_only)))
     _set_skills_cache_state()
     monkeypatch.setattr(prompt_module, "load_skills", fake_load_skills)
-    prompt_module.clear_skills_system_prompt_cache()
+    _set_skills_cache_state()
 
     try:
         prompt_module.clear_skills_system_prompt_cache()
