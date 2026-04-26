@@ -30,12 +30,16 @@ async def test_list_messages_by_run_default_returns_all(base_store):
             content=f"msg-b-{i}",
             thread_id="t1", run_id="run-a",
             event_type="human_message" if i % 2 == 0 else "ai_message",
-            category="message", content=f"msg-a-{i}",
+            category="message",
+            content=f"msg-a-{i}",
         )
     for i in range(3):
         await store.put(
-            thread_id="t1", run_id="run-b",
-            event_type="human_message", category="message", content=f"msg-b-{i}",
+            thread_id="t1",
+            run_id="run-b",
+            event_type="human_message",
+            category="message",
+            content=f"msg-b-{i}",
         )
     await store.put(thread_id="t1", run_id="run-a", event_type="tool_call", category="trace", content="trace")
 
@@ -57,7 +61,8 @@ async def test_list_messages_by_run_with_limit(base_store):
             content=f"msg-a-{i}",
             thread_id="t1", run_id="run-a",
             event_type="human_message" if i % 2 == 0 else "ai_message",
-            category="message", content=f"msg-a-{i}",
+            category="message",
+            content=f"msg-a-{i}",
         )
 
     msgs = await store.list_messages_by_run("t1", "run-a", limit=3)
@@ -78,7 +83,8 @@ async def test_list_messages_by_run_after_seq(base_store):
             content=f"msg-a-{i}",
             thread_id="t1", run_id="run-a",
             event_type="human_message" if i % 2 == 0 else "ai_message",
-            category="message", content=f"msg-a-{i}",
+            category="message",
+            content=f"msg-a-{i}",
         )
 
     all_msgs = await store.list_messages_by_run("t1", "run-a")
@@ -100,7 +106,8 @@ async def test_list_messages_by_run_before_seq(base_store):
             content=f"msg-a-{i}",
             thread_id="t1", run_id="run-a",
             event_type="human_message" if i % 2 == 0 else "ai_message",
-            category="message", content=f"msg-a-{i}",
+            category="message",
+            content=f"msg-a-{i}",
         )
 
     all_msgs = await store.list_messages_by_run("t1", "run-a")
@@ -133,8 +140,11 @@ async def test_list_messages_by_run_does_not_include_other_run(base_store):
         )
     for i in range(3):
         await store.put(
-            thread_id="t1", run_id="run-b",
-            event_type="human_message", category="message", content=f"msg-b-{i}",
+            thread_id="t1",
+            run_id="run-b",
+            event_type="human_message",
+            category="message",
+            content=f"msg-b-{i}",
         )
 
     msgs = await store.list_messages_by_run("t1", "run-b")

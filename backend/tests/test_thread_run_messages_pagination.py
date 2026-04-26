@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from _router_auth_helpers import make_authed_test_app
 from fastapi.testclient import TestClient
 
 from app.gateway.routers import thread_runs
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -9,6 +9,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from deerflow.agents.memory.storage import FileMemoryStorage, create_empty_memory
 
 
@@ -75,6 +77,7 @@ class TestUserIsolatedStorage:
         from deerflow.config.paths import Paths
         from deerflow.config.paths import Paths
         from deerflow.config.memory_config import MemoryConfig
+        from deerflow.config.paths import Paths
 
         paths = Paths(base_dir)
         with patch("deerflow.agents.memory.storage.get_paths", return_value=paths):
@@ -91,6 +94,7 @@ class TestUserIsolatedStorage:
         from deerflow.config.paths import Paths
         from deerflow.config.paths import Paths
         from deerflow.config.memory_config import MemoryConfig
+        from deerflow.config.paths import Paths
 
         paths = Paths(base_dir)
         with patch("deerflow.agents.memory.storage.get_paths", return_value=paths):

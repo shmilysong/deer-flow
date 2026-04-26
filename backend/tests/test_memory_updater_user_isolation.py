@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from deerflow.agents.memory.updater import _save_memory_to_file, clear_memory_data, get_memory_data
 from unittest.mock import MagicMock, patch
 
-from deerflow.agents.memory.updater import get_memory_data, clear_memory_data, _save_memory_to_file
+from deerflow.agents.memory.updater import _save_memory_to_file, clear_memory_data, get_memory_data
 
 
 def test_get_memory_data_passes_user_id():
