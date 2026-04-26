@@ -242,6 +242,8 @@ def test_refresh_skills_system_prompt_cache_async_reloads_immediately(monkeypatc
     state = {"skills": [make_skill("first-skill")]}
     monkeypatch.setattr(prompt_module, "get_or_new_skill_storage", lambda **kwargs: __import__("types").SimpleNamespace(load_skills=lambda *, enabled_only: list(state["skills"])))
     _set_skills_cache_state()
+    monkeypatch.setattr(prompt_module, "load_skills", lambda enabled_only=True: list(state["skills"]))
+    prompt_module.clear_skills_system_prompt_cache()
 
     try:
         prompt_module.warm_enabled_skills_cache()
@@ -305,6 +307,7 @@ def test_explicit_config_enabled_skills_are_cached_by_config_identity(monkeypatc
         assert load_count == 1
     finally:
         _set_skills_cache_state()
+        prompt_module.clear_skills_system_prompt_cache()
 
 
 def test_clear_cache_does_not_spawn_parallel_refresh_workers(monkeypatch, tmp_path):
@@ -347,6 +350,8 @@ def test_clear_cache_does_not_spawn_parallel_refresh_workers(monkeypatch, tmp_pa
 
     monkeypatch.setattr(prompt_module, "get_or_new_skill_storage", lambda **kwargs: __import__("types").SimpleNamespace(load_skills=lambda *, enabled_only: fake_load_skills(enabled_only=enabled_only)))
     _set_skills_cache_state()
+    monkeypatch.setattr(prompt_module, "load_skills", fake_load_skills)
+    prompt_module.clear_skills_system_prompt_cache()
 
     try:
         prompt_module.clear_skills_system_prompt_cache()
@@ -361,6 +366,7 @@ def test_clear_cache_does_not_spawn_parallel_refresh_workers(monkeypatch, tmp_pa
     finally:
         release.set()
         _set_skills_cache_state()
+        prompt_module.clear_skills_system_prompt_cache()
 
 
 def test_warm_enabled_skills_cache_logs_on_timeout(monkeypatch, caplog):
