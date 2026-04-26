@@ -38,6 +38,7 @@ make dev
 | nginx | 2026 | 统一反向代理 |
 
 访问地址：**http://localhost:2026**
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash
@@ -64,6 +65,7 @@ tail -f logs/langgraph.log
 ```bash
 tail -f logs/langgraph.log
 ```
+
   </Tabs.Tab>
 </Tabs>
 
@@ -209,9 +211,9 @@ openssl rand -base64 32
 | 服务 | 最低配置 | 推荐配置 |
 |---|---|---|
 | LangGraph（Agent 运行时） | 2 vCPU、4 GB RAM | 4 vCPU、8 GB RAM |
-| Gateway | 0.5 vCPU、512 MB | 1 vCPU、1 GB |
-| 前端 | 0.5 vCPU、512 MB | 1 vCPU、1 GB |
-| 沙箱容器（每会话） | 1 vCPU、1 GB | 2 vCPU、2 GB |
+| Gateway                   | 0.5 vCPU、512 MB | 1 vCPU、1 GB     |
+| 前端                      | 0.5 vCPU、512 MB | 1 vCPU、1 GB     |
+| 沙箱容器（每会话）        | 1 vCPU、1 GB     | 2 vCPU、2 GB     |
 
 ## 部署后验证
 
