@@ -51,6 +51,7 @@ def test_nginx_routes_official_langgraph_prefix_to_gateway_api():
         assert "proxy_pass http://langgraph" not in content
         assert "rewrite ^/api/langgraph/(.*) /api/$1 break;" in content
         assert "proxy_pass http://gateway" in content or "proxy_pass http://$gateway_upstream" in content
+        assert "proxy_pass http://gateway" in content
 
 
 def test_frontend_rewrites_langgraph_prefix_to_gateway():
