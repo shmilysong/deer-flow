@@ -108,6 +108,7 @@ async def generate_suggestions(
     request: Request,
     config: AppConfig = Depends(get_config),
 ) -> SuggestionsResponse:
+async def generate_suggestions(thread_id: str, body: SuggestionsRequest, request: Request) -> SuggestionsResponse:
     if not body.messages:
         return SuggestionsResponse(suggestions=[])
 
