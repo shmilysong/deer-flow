@@ -38,6 +38,8 @@ def _reset_config_singletons() -> None:
     reset_checkpointer()
     reset_store()
     reset_app_config()
+from deerflow.config.agents_api_config import get_agents_api_config
+from deerflow.config.app_config import AppConfig, get_app_config, reset_app_config
 
 
 def _write_config(path: Path, *, model_name: str, supports_thinking: bool) -> None:
