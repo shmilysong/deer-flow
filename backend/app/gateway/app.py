@@ -35,6 +35,9 @@ from deerflow.config.app_config import apply_logging_level
 AppConfig = deerflow_app_config.AppConfig
 get_app_config = deerflow_app_config.get_app_config
 
+AppConfig = deerflow_app_config.AppConfig
+get_app_config = deerflow_app_config.get_app_config
+
 # Default logging; lifespan overrides from config.yaml log_level.
 logging.basicConfig(
     level=logging.INFO,
