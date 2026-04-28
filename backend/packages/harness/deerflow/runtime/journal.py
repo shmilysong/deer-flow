@@ -160,8 +160,8 @@ class RunJournal(BaseCallbackHandler):
 
         # Capture the first human message sent to any LLM in this run.
         if not self._first_human_msg and messages:
-            for batch in messages.reversed():
-                for m in batch.reversed():
+            for batch in reversed(messages):
+                for m in reversed(batch):
                     if isinstance(m, HumanMessage) and m.name != "summary":
                         caller = self._identify_caller(tags)
                         self.set_first_human_message(m.text)
@@ -192,7 +192,7 @@ class RunJournal(BaseCallbackHandler):
         logger.debug("on_llm_end %s: tags=%s", run_id, tags)
     def on_llm_end(self, response, *, run_id, parent_run_id, tags, **kwargs) -> None:
         messages: list[AnyMessage] = []
-        logger.info(f"on_llm_end {run_id}: response: {tags} {kwargs}")
+        logger.debug("on_llm_end %s: tags=%s", run_id, tags)
         for generation in response.generations:
             for gen in generation:
                 if hasattr(gen, "message"):
@@ -223,6 +223,7 @@ class RunJournal(BaseCallbackHandler):
                 # Fallback: on_chat_model_start was not called
                 self._llm_call_index += 1
                 call_index = self._llm_call_index
+                self._seen_llm_starts.add(rid)
 
             # Trace event: llm_response (OpenAI completion format)
             self._put(
