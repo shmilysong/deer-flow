@@ -255,14 +255,15 @@ def test_make_lead_agent_reads_runtime_options_from_context(monkeypatch):
     get_available_tools = MagicMock(return_value=[])
     monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
     monkeypatch.setattr(tools_module, "get_available_tools", get_available_tools)
-    monkeypatch.setattr(lead_agent_module, "_build_middlewares", lambda config, model_name, agent_name=None: [])
+    monkeypatch.setattr(lead_agent_module, "_build_middlewares", lambda config, model_name, agent_name=None, **kwargs: [])
 
     captured: dict[str, object] = {}
 
-    def _fake_create_chat_model(*, name, thinking_enabled, reasoning_effort=None):
+    def _fake_create_chat_model(*, name, thinking_enabled, reasoning_effort=None, app_config=None):
         captured["name"] = name
         captured["thinking_enabled"] = thinking_enabled
         captured["reasoning_effort"] = reasoning_effort
+        captured["app_config"] = app_config
         return object()
 
     monkeypatch.setattr(lead_agent_module, "create_chat_model", _fake_create_chat_model)
@@ -285,8 +286,9 @@ def test_make_lead_agent_reads_runtime_options_from_context(monkeypatch):
         "name": "context-model",
         "thinking_enabled": False,
         "reasoning_effort": "high",
+        "app_config": app_config,
     }
-    get_available_tools.assert_called_once_with(model_name="context-model", groups=None, subagent_enabled=True)
+    get_available_tools.assert_called_once_with(model_name="context-model", groups=None, subagent_enabled=True, app_config=app_config)
     assert result["model"] is not None
 
 
@@ -418,6 +420,11 @@ def test_create_summarization_middleware_uses_configured_model_alias(monkeypatch
     assert captured["name"] == "model-masswork"
     assert captured["thinking_enabled"] is False
     assert captured["app_config"] is app_config
+    middleware = lead_agent_module._create_summarization_middleware(app_config=_make_app_config([_make_model("model-masswork", supports_thinking=False)]))
+
+    assert captured["name"] == "model-masswork"
+    assert captured["thinking_enabled"] is False
+    assert captured["app_config"] is not None
     assert middleware["model"] is fake_model
     fake_model.with_config.assert_called_once_with(tags=["middleware:summarize"])
 

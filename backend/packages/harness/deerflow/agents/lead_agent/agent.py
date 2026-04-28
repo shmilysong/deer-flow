@@ -19,6 +19,8 @@ from deerflow.agents.middlewares.view_image_middleware import ViewImageMiddlewar
 from deerflow.agents.thread_state import ThreadState
 from deerflow.config.agents_config import load_agent_config, validate_agent_name
 from deerflow.config.app_config import AppConfig, get_app_config
+from deerflow.config.memory_config import get_memory_config
+from deerflow.config.summarization_config import get_summarization_config
 from deerflow.models import create_chat_model
 from deerflow.skills.tool_policy import filter_tools_by_skill_allowed_tools
 from deerflow.skills.types import Skill
@@ -78,6 +80,9 @@ def _create_summarization_middleware(*, app_config: AppConfig | None = None) -> 
         model = create_chat_model(name=config.model_name, thinking_enabled=False, app_config=resolved_app_config)
     else:
         model = create_chat_model(thinking_enabled=False, app_config=resolved_app_config)
+        model = create_chat_model(name=config.model_name, thinking_enabled=False, app_config=app_config)
+    else:
+        model = create_chat_model(thinking_enabled=False, app_config=app_config)
     model = model.with_config(tags=["middleware:summarize"])
 
     # Prepare kwargs
@@ -102,7 +107,8 @@ def _create_summarization_middleware(*, app_config: AppConfig | None = None) -> 
     # config is not expected to change after startup.
     skills_container_path = resolved_app_config.skills.container_path or "/mnt/skills"
     try:
-        skills_container_path = get_app_config().skills.container_path or "/mnt/skills"
+        resolved_app_config = app_config or get_app_config()
+        skills_container_path = resolved_app_config.skills.container_path or "/mnt/skills"
     except Exception:
         logger.exception("Failed to resolve skills container path; falling back to default")
         skills_container_path = "/mnt/skills"
@@ -263,6 +269,8 @@ def _build_middlewares(
     """
     resolved_app_config = app_config or get_app_config()
     middlewares = build_lead_runtime_middlewares(app_config=resolved_app_config, lazy_init=True)
+    middlewares = build_lead_runtime_middlewares(lazy_init=True)
+    resolved_app_config = app_config or get_app_config()
 
     # Add summarization middleware if enabled
     summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config)
@@ -346,12 +354,14 @@ def make_lead_agent(config: RunnableConfig):
 
 
 def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
+def make_lead_agent(config: RunnableConfig, app_config: AppConfig | None = None):
     # Lazy import to avoid circular dependency
     from deerflow.tools import get_available_tools
     from deerflow.tools.builtins import setup_agent, update_agent
 
     cfg = _get_runtime_config(config)
     resolved_app_config = app_config
+    resolved_app_config = app_config or get_app_config()
 
     thinking_enabled = cfg.get("thinking_enabled", True)
     reasoning_effort = cfg.get("reasoning_effort", None)
@@ -415,6 +425,7 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
         return create_agent(
             model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config),
             tools=filter_tools_by_skill_allowed_tools(tools, skills_for_tool_policy),
+            tools=get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, app_config=resolved_app_config) + [setup_agent],
             middleware=_build_middlewares(config, model_name=model_name, app_config=resolved_app_config),
             system_prompt=apply_prompt_template(
                 subagent_enabled=subagent_enabled,
@@ -433,6 +444,12 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
     return create_agent(
         model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config),
         tools=filter_tools_by_skill_allowed_tools(tools + extra_tools, skills_for_tool_policy),
+        tools=get_available_tools(
+            model_name=model_name,
+            groups=agent_config.tool_groups if agent_config else None,
+            subagent_enabled=subagent_enabled,
+            app_config=resolved_app_config,
+        ),
         middleware=_build_middlewares(config, model_name=model_name, agent_name=agent_name, app_config=resolved_app_config),
         system_prompt=apply_prompt_template(
             subagent_enabled=subagent_enabled,

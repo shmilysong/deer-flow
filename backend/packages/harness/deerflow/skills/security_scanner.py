@@ -38,6 +38,7 @@ def _extract_json_object(raw: str) -> dict | None:
 
 
 async def scan_skill_content(content: str, *, executable: bool = False, location: str = SKILL_MD_FILE, app_config: AppConfig | None = None) -> ScanResult:
+async def scan_skill_content(content: str, *, executable: bool = False, location: str = "SKILL.md", app_config: AppConfig | None = None) -> ScanResult:
     """Screen skill content before it is written to disk."""
     rubric = (
         "You are a security reviewer for AI agent skills. "

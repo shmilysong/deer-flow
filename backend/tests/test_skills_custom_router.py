@@ -214,6 +214,8 @@ def test_custom_skill_rollback_blocked_by_scanner(monkeypatch, tmp_path):
     history_file = get_or_new_skill_storage(app_config=config).get_skill_history_file("demo-skill")
     history_file.parent.mkdir(parents=True, exist_ok=True)
     history_file.write_text(
+    monkeypatch.setattr("deerflow.skills.manager.get_app_config", lambda: config)
+    get_skill_history_file("demo-skill", app_config=config).write_text(
         '{"action":"human_edit","prev_content":' + json.dumps(original_content) + ',"new_content":' + json.dumps(edited_content) + "}\n",
         encoding="utf-8",
     )
@@ -348,7 +350,7 @@ def test_update_skill_refreshes_prompt_cache_before_return(monkeypatch, tmp_path
     enabled_state = {"value": True}
     refresh_calls = []
 
-    def _load_skills(*, enabled_only: bool):
+    def _load_skills(*, enabled_only: bool, app_config=None):
         skill = _make_skill("demo-skill", enabled=enabled_state["value"])
         if enabled_only and not skill.enabled:
             return []

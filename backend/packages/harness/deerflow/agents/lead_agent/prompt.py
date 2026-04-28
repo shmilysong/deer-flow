@@ -155,6 +155,21 @@ def get_enabled_skills_for_config(app_config: AppConfig | None = None) -> list[S
 
 def _skill_mutability_label(category: SkillCategory | str) -> str:
     return "[custom, editable]" if category == SkillCategory.CUSTOM else "[built-in]"
+def _get_enabled_skills_for_config(app_config: AppConfig | None = None) -> list[Skill]:
+    """Return enabled skills using the caller's config source.
+
+    When a concrete ``app_config`` is supplied, bypass the global enabled-skills
+    cache so the skill list and skill paths are resolved from the same config
+    object. This keeps request-scoped config injection consistent even while the
+    release branch still supports global fallback paths.
+    """
+    if app_config is None:
+        return _get_enabled_skills()
+    return list(load_skills(enabled_only=True, app_config=app_config))
+
+
+def _skill_mutability_label(category: str) -> str:
+    return "[custom, editable]" if category == "custom" else "[built-in]"
 
 
 def clear_skills_system_prompt_cache() -> None:
@@ -636,6 +651,7 @@ You have access to skills that provide optimized workflows for specific tasks. E
 def get_skills_prompt_section(available_skills: set[str] | None = None, *, app_config: AppConfig | None = None) -> str:
     """Generate the skills prompt section with available skills list."""
     skills = get_enabled_skills_for_config(app_config)
+    skills = _get_enabled_skills_for_config(app_config)
 
     if app_config is None:
         try:
@@ -649,6 +665,7 @@ def get_skills_prompt_section(available_skills: set[str] | None = None, *, app_c
             skill_evolution_enabled = False
     else:
         config = app_config
+        config = app_config or get_app_config()
         container_base_path = config.skills.container_path
         skill_evolution_enabled = config.skill_evolution.enabled
 
@@ -709,6 +726,8 @@ def get_deferred_tools_prompt_section(*, app_config: AppConfig | None = None) ->
 
             config = get_app_config()
         except Exception:
+        config = app_config or get_app_config()
+        if not config.tool_search.enabled:
             return ""
     else:
         config = app_config
@@ -762,6 +781,11 @@ def _build_custom_mounts_section(*, app_config: AppConfig | None = None) -> str:
         config = app_config
 
     mounts = config.sandbox.mounts or []
+        config = app_config or get_app_config()
+        mounts = config.sandbox.mounts or []
+    except Exception:
+        logger.exception("Failed to load configured sandbox mounts for the lead-agent prompt")
+        return ""
 
     if not mounts:
         return ""
@@ -816,6 +840,7 @@ def apply_prompt_template(
 
     # Build ACP agent section only if ACP agents are configured
     acp_section = _build_acp_section(app_config=app_config)
+    acp_section = _build_acp_section()
     custom_mounts_section = _build_custom_mounts_section(app_config=app_config)
     acp_and_mounts_section = "\n".join(section for section in (acp_section, custom_mounts_section) if section)
 
