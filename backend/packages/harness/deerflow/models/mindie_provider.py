@@ -105,9 +105,9 @@ def _parse_xml_tool_call_to_dict(content: str) -> tuple[str, list[dict]]:
 
         args = {}
         param_pattern = re.compile(r"<parameter=([^>]+)>(.*?)</parameter>", re.DOTALL)
-        for param_match in param_pattern.finditer(inner_content):
-            key = param_match.group(1).strip()
-            raw_value = param_match.group(2).strip()
+        for param_match in param_pattern.finditer(param_source):
+            key = html.unescape(param_match.group(1).strip())
+            raw_value = html.unescape(param_match.group(2).strip())
 
             # Attempt to deserialize string values into native Python types
             # to satisfy downstream Pydantic validation.
