@@ -9,6 +9,7 @@ from deerflow.community.aio_sandbox.local_backend import (
     _redact_container_command_for_log,
     _resolve_docker_bind_host,
 )
+from deerflow.community.aio_sandbox.local_backend import LocalContainerBackend, _format_container_command_for_log, _format_container_mount, _redact_container_command_for_log
 
 
 def test_format_container_mount_uses_mount_syntax_for_docker_windows_paths():
