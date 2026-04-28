@@ -12,6 +12,20 @@ from deerflow.config.app_config import AppConfig
 from deerflow.config.extensions_config import ExtensionsConfig, SkillStateConfig, get_extensions_config, reload_extensions_config
 from deerflow.skills import Skill
 from deerflow.skills.installer import SkillAlreadyExistsError
+from deerflow.skills import Skill, load_skills
+from deerflow.skills.installer import SkillAlreadyExistsError, ainstall_skill_from_archive
+from deerflow.skills.manager import (
+    append_history,
+    atomic_write,
+    custom_skill_exists,
+    ensure_custom_skill_is_editable,
+    get_custom_skill_dir,
+    get_custom_skill_file,
+    get_skill_history_file,
+    read_custom_skill_content,
+    read_history,
+    validate_skill_markdown_content,
+)
 from deerflow.skills.security_scanner import scan_skill_content
 from deerflow.skills.storage import get_or_new_skill_storage
 from deerflow.skills.types import SKILL_MD_FILE, SkillCategory
@@ -110,6 +124,7 @@ async def install_skill(request: SkillInstallRequest, config: AppConfig = Depend
     try:
         skill_file_path = resolve_thread_virtual_path(request.thread_id, request.path)
         result = await get_or_new_skill_storage(app_config=config).ainstall_skill_from_archive(skill_file_path)
+        result = await ainstall_skill_from_archive(skill_file_path)
         await refresh_skills_system_prompt_cache_async()
         return SkillInstallResponse(**result)
     except FileNotFoundError as e:

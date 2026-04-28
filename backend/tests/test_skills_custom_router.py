@@ -59,6 +59,7 @@ def test_install_skill_archive_runs_security_scan(monkeypatch, tmp_path):
     refresh_calls = []
 
     async def _scan(content, *, executable, location, app_config=None):
+    async def _scan(content, *, executable, location):
         from deerflow.skills.security_scanner import ScanResult
 
         scan_calls.append({"content": content, "executable": executable, "location": location})
@@ -82,6 +83,13 @@ def test_install_skill_archive_runs_security_scan(monkeypatch, tmp_path):
     monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
 
     app = _make_test_app(config)
+    monkeypatch.setattr(skills_router, "resolve_thread_virtual_path", lambda thread_id, path: archive)
+    monkeypatch.setattr("deerflow.skills.installer.get_skills_root_path", lambda: skills_root)
+    monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
+    monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
+
+    app = FastAPI()
+    app.include_router(skills_router.router)
 
     with TestClient(app) as client:
         response = client.post("/api/skills/install", json={"thread_id": "thread-1", "path": "mnt/user-data/outputs/archive-skill.skill"})
@@ -128,6 +136,13 @@ def test_install_skill_archive_security_scan_block_returns_400(monkeypatch, tmp_
     monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
 
     app = _make_test_app(config)
+    monkeypatch.setattr(skills_router, "resolve_thread_virtual_path", lambda thread_id, path: archive)
+    monkeypatch.setattr("deerflow.skills.installer.get_skills_root_path", lambda: skills_root)
+    monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
+    monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
+
+    app = FastAPI()
+    app.include_router(skills_router.router)
 
     with TestClient(app) as client:
         response = client.post("/api/skills/install", json={"thread_id": "thread-1", "path": "mnt/user-data/outputs/blocked-skill.skill"})

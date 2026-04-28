@@ -9,6 +9,7 @@ import pytest
 
 from deerflow.skills.installer import (
     SkillSecurityScanError,
+    install_skill_from_archive,
     is_symlink_member,
     is_unsafe_zip_member,
     resolve_skill_dir_from_archive,
@@ -211,6 +212,7 @@ class TestInstallSkillFromArchive:
         monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
 
         get_or_new_skill_storage(skills_path=skills_root).install_skill_from_archive(zip_path)
+        install_skill_from_archive(zip_path, skills_root=skills_root)
 
         assert calls == [
             {
@@ -241,6 +243,7 @@ class TestInstallSkillFromArchive:
         monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
 
         get_or_new_skill_storage(skills_path=skills_root).install_skill_from_archive(zip_path)
+        install_skill_from_archive(zip_path, skills_root=skills_root)
 
         assert calls == [
             {
@@ -276,6 +279,7 @@ class TestInstallSkillFromArchive:
 
         with pytest.raises(SkillSecurityScanError, match="nested SKILL.md"):
             get_or_new_skill_storage(skills_path=skills_root).install_skill_from_archive(zip_path)
+            install_skill_from_archive(zip_path, skills_root=skills_root)
 
         assert not (skills_root / "custom" / "test-skill").exists()
 
@@ -296,6 +300,7 @@ class TestInstallSkillFromArchive:
 
         with pytest.raises(SkillSecurityScanError, match="rejected executable.*script needs review"):
             get_or_new_skill_storage(skills_path=skills_root).install_skill_from_archive(zip_path)
+            install_skill_from_archive(zip_path, skills_root=skills_root)
 
         assert not (skills_root / "custom" / "test-skill").exists()
 
@@ -311,6 +316,7 @@ class TestInstallSkillFromArchive:
 
         with pytest.raises(SkillSecurityScanError, match="Security scan blocked.*prompt injection"):
             get_or_new_skill_storage(skills_path=skills_root).install_skill_from_archive(zip_path)
+            install_skill_from_archive(zip_path, skills_root=skills_root)
 
         assert not (skills_root / "custom" / "blocked-skill").exists()
 
@@ -329,6 +335,7 @@ class TestInstallSkillFromArchive:
 
         with pytest.raises(OSError, match="copy failed"):
             get_or_new_skill_storage(skills_path=skills_root).install_skill_from_archive(zip_path)
+            install_skill_from_archive(zip_path, skills_root=skills_root)
 
         custom_dir = skills_root / "custom"
         assert not (custom_dir / "test-skill").exists()
@@ -350,6 +357,7 @@ class TestInstallSkillFromArchive:
 
         with pytest.raises(ValueError, match="already exists"):
             get_or_new_skill_storage(skills_path=skills_root).install_skill_from_archive(zip_path)
+            install_skill_from_archive(zip_path, skills_root=skills_root)
 
         assert (target / "marker.txt").read_text(encoding="utf-8") == "external"
         assert not (target / "SKILL.md").exists()
@@ -367,6 +375,7 @@ class TestInstallSkillFromArchive:
 
         with pytest.raises(OSError, match="move failed"):
             get_or_new_skill_storage(skills_path=skills_root).install_skill_from_archive(zip_path)
+            install_skill_from_archive(zip_path, skills_root=skills_root)
 
         assert not (skills_root / "custom" / "test-skill").exists()
 
