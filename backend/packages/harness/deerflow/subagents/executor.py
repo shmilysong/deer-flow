@@ -186,6 +186,7 @@ def _submit_to_isolated_loop_in_context(
             _get_isolated_subagent_loop(),
         )
     )
+        return _isolated_subagent_loop
 
 
 def _filter_tools(
@@ -624,6 +625,10 @@ class SubagentExecutor:
             future = _submit_to_isolated_loop_in_context(
                 parent_context,
                 lambda: self._aexecute(task, result_holder),
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self._aexecute(task, result_holder),
+                _get_isolated_subagent_loop(),
             )
             return future.result(timeout=self.config.timeout_seconds)
         except FuturesTimeoutError:
@@ -732,6 +737,9 @@ class SubagentExecutor:
                 execution_future = _submit_to_isolated_loop_in_context(
                     parent_context,
                     lambda: self._aexecute(task, result_holder),
+                execution_future = asyncio.run_coroutine_threadsafe(
+                    self._aexecute(task, result_holder),
+                    _get_isolated_subagent_loop(),
                 )
                 try:
                     # Wait for execution with timeout

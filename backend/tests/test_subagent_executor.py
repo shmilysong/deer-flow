@@ -784,6 +784,57 @@ class TestSyncExecutionPath:
             thread_id="test-thread",
         )
 
+        original_isolated_execute = executor._execute_in_isolated_loop
+
+        def tracked_isolated_execute(task, result_holder=None):
+            isolated_helper_threads.append(threading.current_thread().name)
+            return original_isolated_execute(task, result_holder)
+
+        with patch.object(executor, "_create_agent", return_value=mock_agent):
+            first = executor.execute("Task 1")
+            second = executor.execute("Task 2")
+
+        assert first.status == SubagentStatus.COMPLETED
+        assert second.status == SubagentStatus.COMPLETED
+        assert len(execution_loops) == 2
+        assert execution_loops[0] is execution_loops[1]
+        assert execution_loops[0].is_running()
+            with patch.object(executor, "_execute_in_isolated_loop", side_effect=tracked_isolated_execute) as isolated:
+                result = executor.execute("Task")
+
+        assert isolated.call_count == 1
+        assert isolated_helper_threads == [caller_thread]
+        assert execution_threads
+        assert execution_threads == ["subagent-persistent-loop"]
+        assert result.status == SubagentStatus.COMPLETED
+        assert result.result == "Async loop result"
+
+    @pytest.mark.anyio
+    async def test_execute_in_running_event_loop_reuses_persistent_isolated_loop(self, classes, base_config, mock_agent, msg):
+        """Regression: repeated isolated executions should reuse one long-lived loop."""
+        SubagentExecutor = classes["SubagentExecutor"]
+        SubagentStatus = classes["SubagentStatus"]
+        execution_loops = []
+
+        final_state = {
+            "messages": [
+                msg.human("Task"),
+                msg.ai("Async loop result", "msg-1"),
+            ]
+        }
+
+        async def mock_astream(*args, **kwargs):
+            execution_loops.append(asyncio.get_running_loop())
+            yield final_state
+
+        mock_agent.astream = mock_astream
+
+        executor = SubagentExecutor(
+            config=base_config,
+            tools=[],
+            thread_id="test-thread",
+        )
+
         with patch.object(executor, "_create_agent", return_value=mock_agent):
             first = executor.execute("Task 1")
             second = executor.execute("Task 2")
