@@ -63,15 +63,17 @@ def _logging_level_from_config(name: str) -> int:
     mapping = logging.getLevelNamesMapping()
     return mapping.get((name or "info").strip().upper(), logging.INFO)
 
+    This configures the root logger and the ``debug.log`` file handler so logs do
+    not print on the interactive console. It is idempotent: any pre-existing
+    handlers on the root logger (e.g. installed by ``logging.basicConfig`` in
+    transitively imported modules) are removed so the debug session output only
+    lands in ``debug.log``.
 
-def _setup_logging(log_level: str) -> None:
-    """Send application logs to ``debug.log`` at *log_level*; do not print them on the console.
-
-    Idempotent: any pre-existing handlers on the root logger (e.g. installed by
-    ``logging.basicConfig`` in transitively imported modules) are removed so the
-    debug session output only lands in ``debug.log``.
+    Note: later config-driven logging adjustments may change named logger
+    verbosity without raising the root logger or file-handler thresholds set
+    here, so the eventual contents of ``debug.log`` may not be filtered solely by
+    this function's ``log_level`` argument.
     """
-    level = _logging_level_from_config(log_level)
     root = logging.root
     for h in list(root.handlers):
         root.removeHandler(h)
@@ -85,18 +87,9 @@ def _setup_logging(log_level: str) -> None:
     root.setLevel(level)
 
     file_handler = logging.FileHandler("debug.log", mode="a", encoding="utf-8")
-    file_handler.setLevel(level)
+    file_handler.setLevel(log_level)
     file_handler.setFormatter(logging.Formatter(_LOG_FMT, datefmt=_LOG_DATEFMT))
     root.addHandler(file_handler)
-
-
-def _update_logging_level(log_level: str) -> None:
-    """Update the root logger and existing handlers to *log_level*."""
-    level = _logging_level_from_config(log_level)
-    root = logging.root
-    root.setLevel(level)
-    for handler in root.handlers:
-        handler.setLevel(level)
 
 
 async def main():
@@ -112,9 +105,10 @@ async def main():
     _setup_logging("info")
 
     from deerflow.config import get_app_config
+    from deerflow.config.app_config import apply_logging_level
 
     app_config = get_app_config()
-    _update_logging_level(app_config.log_level)
+    apply_logging_level(app_config.log_level)
 
     # Delay the rest of the deerflow imports until *after* logging is installed
     # so that any import-time side effects (e.g. deerflow.agents starts a
