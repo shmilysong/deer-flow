@@ -240,6 +240,9 @@ class SubagentExecutor:
             app_config: Resolved AppConfig. When None, ``_create_agent`` falls
                 back to ``get_app_config()`` (matches the lead-agent factory's
                 pattern).
+            app_config: Resolved AppConfig; threaded into middleware factories
+                at agent-build time. When None, ``_create_agent`` falls back to
+                ``get_app_config()`` (matches the lead-agent factory's pattern).
             parent_model: The parent agent's model name for inheritance.
             sandbox_state: Sandbox state from parent agent.
             thread_data: Thread data from parent agent.
@@ -282,6 +285,17 @@ class SubagentExecutor:
 
         # Reuse shared middleware composition with lead agent.
         middlewares = build_subagent_runtime_middlewares(app_config=app_config, model_name=self.model_name, lazy_init=True)
+        # Mirror lead-agent factory pattern: prefer explicit app_config,
+        # fall back to ambient lookup at agent-build time.
+        from deerflow.config import get_app_config
+
+        resolved_app_config = self.app_config or get_app_config()
+        model_name = _get_model_name(self.config, self.parent_model)
+        model = create_chat_model(name=model_name, thinking_enabled=False, app_config=resolved_app_config)
+
+        from deerflow.agents.middlewares.tool_error_handling_middleware import build_subagent_runtime_middlewares
+
+        middlewares = build_subagent_runtime_middlewares(app_config=resolved_app_config, lazy_init=True)
 
         return create_agent(
             model=model,

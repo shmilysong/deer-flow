@@ -14,6 +14,24 @@ from deerflow.config.app_config import AppConfig, CircuitBreakerConfig
 from deerflow.config.guardrails_config import GuardrailsConfig
 from deerflow.config.model_config import ModelConfig
 from deerflow.config.sandbox_config import SandboxConfig
+from deerflow.config.app_config import AppConfig, CircuitBreakerConfig
+from deerflow.config.guardrails_config import GuardrailsConfig
+from deerflow.config.sandbox_config import SandboxConfig
+
+
+def _module(name: str, **attrs):
+    module = ModuleType(name)
+    for key, value in attrs.items():
+        setattr(module, key, value)
+    return module
+
+
+def _make_app_config() -> AppConfig:
+    return AppConfig(
+        sandbox=SandboxConfig(use="test"),
+        guardrails=GuardrailsConfig(enabled=False),
+        circuit_breaker=CircuitBreakerConfig(failure_threshold=7, recovery_timeout_sec=11),
+    )
 
 
 def _request(name: str = "web_search", tool_call_id: str | None = "tc-1"):

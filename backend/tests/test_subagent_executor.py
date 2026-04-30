@@ -19,6 +19,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -232,6 +233,7 @@ class TestAgentConstruction:
         SubagentExecutor = classes["SubagentExecutor"]
 
         app_config = SimpleNamespace(models=[SimpleNamespace(name="default-model")])
+        app_config = object()
         model = object()
         middlewares = [object()]
         agent = object()

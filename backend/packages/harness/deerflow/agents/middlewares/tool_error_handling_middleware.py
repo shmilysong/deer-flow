@@ -149,6 +149,9 @@ def build_subagent_runtime_middlewares(
         app_config = get_app_config()
 
     middlewares = _build_runtime_middlewares(
+def build_subagent_runtime_middlewares(*, app_config: AppConfig, lazy_init: bool = True) -> list[AgentMiddleware]:
+    """Middlewares shared by subagent runtime before subagent-only middlewares."""
+    return _build_runtime_middlewares(
         app_config=app_config,
         include_uploads=False,
         include_dangling_tool_call_patch=True,
