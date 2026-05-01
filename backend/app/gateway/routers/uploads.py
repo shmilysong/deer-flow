@@ -56,6 +56,14 @@ class UploadLimits(BaseModel):
     max_total_size: int
 
 
+class UploadLimits(BaseModel):
+    """Application-level upload limits exposed to clients."""
+
+    max_files: int
+    max_file_size: int
+    max_total_size: int
+
+
 def _make_file_sandbox_writable(file_path: os.PathLike[str] | str) -> None:
     """Ensure uploaded files remain writable when mounted into non-local sandboxes.
 
@@ -124,6 +132,10 @@ async def _write_upload_file_with_limits(
     file: UploadFile,
     *,
     uploads_dir: os.PathLike[str] | str,
+async def _write_upload_file_streaming(
+    file: UploadFile,
+    file_path: os.PathLike[str] | str,
+    *,
     display_filename: str,
     max_single_file_size: int,
     max_total_size: int,
@@ -132,6 +144,9 @@ async def _write_upload_file_with_limits(
     file_size = 0
     file_path, fh = open_upload_file_no_symlink(uploads_dir, display_filename)
     try:
+) -> tuple[int, int]:
+    file_size = 0
+    with open(file_path, "wb") as output:
         while chunk := await file.read(UPLOAD_CHUNK_SIZE):
             file_size += len(chunk)
             total_size += len(chunk)
@@ -150,6 +165,8 @@ async def _write_upload_file_with_limits(
     else:
         fh.close()
     return file_path, file_size, total_size
+            output.write(chunk)
+    return file_size, total_size
 
 
 def _auto_convert_documents_enabled(app_config: AppConfig) -> bool:
@@ -218,6 +235,11 @@ async def upload_files(
             file_path, file_size, total_size = await _write_upload_file_with_limits(
                 file,
                 uploads_dir=uploads_dir,
+            file_path = uploads_dir / safe_filename
+            written_paths.append(file_path)
+            file_size, total_size = await _write_upload_file_streaming(
+                file,
+                file_path,
                 display_filename=safe_filename,
                 max_single_file_size=limits.max_file_size,
                 max_total_size=limits.max_total_size,
