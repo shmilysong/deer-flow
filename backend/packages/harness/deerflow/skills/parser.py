@@ -35,6 +35,7 @@ def parse_allowed_tools(raw: object, skill_file: Path) -> list[str] | None:
 
 def parse_skill_file(skill_file: Path, category: SkillCategory, relative_path: Path | None = None) -> Skill | None:
 def parse_skill_file(skill_file: Path, category: str, relative_path: Path | None = None) -> Skill | None:
+def parse_skill_file(skill_file: Path, category: SkillCategory, relative_path: Path | None = None) -> Skill | None:
     """Parse a SKILL.md file and extract metadata.
 
     Args:

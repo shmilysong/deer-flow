@@ -84,12 +84,11 @@ def test_install_skill_archive_runs_security_scan(monkeypatch, tmp_path):
 
     app = _make_test_app(config)
     monkeypatch.setattr(skills_router, "resolve_thread_virtual_path", lambda thread_id, path: archive)
-    monkeypatch.setattr("deerflow.skills.installer.get_skills_root_path", lambda: skills_root)
+    monkeypatch.setattr(skills_router, "get_or_new_skill_storage", lambda **kw: storage)
     monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
     monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
 
-    app = FastAPI()
-    app.include_router(skills_router.router)
+    app = _make_test_app(config)
 
     with TestClient(app) as client:
         response = client.post("/api/skills/install", json={"thread_id": "thread-1", "path": "mnt/user-data/outputs/archive-skill.skill"})
@@ -137,12 +136,11 @@ def test_install_skill_archive_security_scan_block_returns_400(monkeypatch, tmp_
 
     app = _make_test_app(config)
     monkeypatch.setattr(skills_router, "resolve_thread_virtual_path", lambda thread_id, path: archive)
-    monkeypatch.setattr("deerflow.skills.installer.get_skills_root_path", lambda: skills_root)
+    monkeypatch.setattr(skills_router, "get_or_new_skill_storage", lambda **kw: storage)
     monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
     monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
 
-    app = FastAPI()
-    app.include_router(skills_router.router)
+    app = _make_test_app(config)
 
     with TestClient(app) as client:
         response = client.post("/api/skills/install", json={"thread_id": "thread-1", "path": "mnt/user-data/outputs/blocked-skill.skill"})
@@ -350,7 +348,7 @@ def test_update_skill_refreshes_prompt_cache_before_return(monkeypatch, tmp_path
     enabled_state = {"value": True}
     refresh_calls = []
 
-    def _load_skills(*, enabled_only: bool, app_config=None):
+    def _load_skills(*, enabled_only: bool):
         skill = _make_skill("demo-skill", enabled=enabled_state["value"])
         if enabled_only and not skill.enabled:
             return []

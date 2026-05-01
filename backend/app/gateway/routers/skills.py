@@ -165,7 +165,7 @@ async def get_custom_skill(skill_name: str, config: AppConfig = Depends(get_conf
         skill = next((s for s in skills if s.name == skill_name and s.category == "custom"), None)
         if skill is None:
             raise HTTPException(status_code=404, detail=f"Custom skill '{skill_name}' not found")
-        return CustomSkillContentResponse(**_skill_to_response(skill).model_dump(), content=read_custom_skill_content(skill_name, app_config=config))
+        return CustomSkillContentResponse(**_skill_to_response(skill).model_dump(), content=get_or_new_skill_storage(app_config=config).read_custom_skill(skill_name))
     except HTTPException:
         raise
     except Exception as e:
@@ -191,10 +191,9 @@ async def update_custom_skill(skill_name: str, request: CustomSkillUpdateRequest
         scan = await scan_skill_content(request.content, executable=False, location=f"{skill_name}/SKILL.md", app_config=config)
         if scan.decision == "block":
             raise HTTPException(status_code=400, detail=f"Security scan blocked the edit: {scan.reason}")
-        skill_file = get_custom_skill_dir(skill_name, app_config=config) / "SKILL.md"
-        prev_content = skill_file.read_text(encoding="utf-8")
-        atomic_write(skill_file, request.content)
-        append_history(
+        prev_content = storage.read_custom_skill(skill_name)
+        storage.write_custom_skill(skill_name, SKILL_MD_FILE, request.content)
+        storage.append_history(
             skill_name,
             {
                 "action": "human_edit",
@@ -205,7 +204,6 @@ async def update_custom_skill(skill_name: str, request: CustomSkillUpdateRequest
                 "new_content": request.content,
                 "scanner": {"decision": scan.decision, "reason": scan.reason},
             },
-            app_config=config,
         )
         await refresh_skills_system_prompt_cache_async()
         return await get_custom_skill(skill_name, config)
@@ -280,7 +278,7 @@ async def get_custom_skill_history(skill_name: str, config: AppConfig = Depends(
         return CustomSkillHistoryResponse(history=storage.read_history(skill_name))
         if not custom_skill_exists(skill_name, app_config=config) and not get_skill_history_file(skill_name, app_config=config).exists():
             raise HTTPException(status_code=404, detail=f"Custom skill '{skill_name}' not found")
-        return CustomSkillHistoryResponse(history=read_history(skill_name, app_config=config))
+        return CustomSkillHistoryResponse(history=storage.read_history(skill_name))
     except HTTPException:
         raise
     except Exception as e:
@@ -297,7 +295,7 @@ async def rollback_custom_skill(skill_name: str, request: SkillRollbackRequest, 
         history = storage.read_history(skill_name)
         if not custom_skill_exists(skill_name, app_config=config) and not get_skill_history_file(skill_name, app_config=config).exists():
             raise HTTPException(status_code=404, detail=f"Custom skill '{skill_name}' not found")
-        history = read_history(skill_name, app_config=config)
+        history = storage.read_history(skill_name)
         if not history:
             raise HTTPException(status_code=400, detail=f"Custom skill '{skill_name}' has no history")
         record = history[request.history_index]
@@ -328,8 +326,8 @@ async def rollback_custom_skill(skill_name: str, request: SkillRollbackRequest, 
         storage.append_history(skill_name, history_entry)
             append_history(skill_name, history_entry, app_config=config)
             raise HTTPException(status_code=400, detail=f"Rollback blocked by security scanner: {scan.reason}")
-        atomic_write(skill_file, target_content)
-        append_history(skill_name, history_entry, app_config=config)
+        storage.write_custom_skill(skill_name, SKILL_MD_FILE, target_content)
+        storage.append_history(skill_name, history_entry)
         await refresh_skills_system_prompt_cache_async()
         return await get_custom_skill(skill_name, config)
     except HTTPException:

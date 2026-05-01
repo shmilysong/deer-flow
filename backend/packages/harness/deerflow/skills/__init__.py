@@ -20,4 +20,7 @@ __all__ = [
     "ainstall_skill_from_archive",
     "SkillAlreadyExistsError",
     "SkillSecurityScanError",
+    "SkillStorage",
+    "LocalSkillStorage",
+    "get_or_new_skill_storage",
 ]

@@ -165,11 +165,11 @@ def _get_enabled_skills_for_config(app_config: AppConfig | None = None) -> list[
     """
     if app_config is None:
         return _get_enabled_skills()
-    return list(load_skills(enabled_only=True, app_config=app_config))
+    return list(get_or_new_skill_storage(app_config=app_config).load_skills(enabled_only=True))
 
 
-def _skill_mutability_label(category: str) -> str:
-    return "[custom, editable]" if category == "custom" else "[built-in]"
+def _skill_mutability_label(category: SkillCategory | str) -> str:
+    return "[custom, editable]" if category == SkillCategory.CUSTOM else "[built-in]"
 
 
 def clear_skills_system_prompt_cache() -> None:

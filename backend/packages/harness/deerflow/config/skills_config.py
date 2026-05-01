@@ -57,6 +57,15 @@ class SkillsConfig(BaseModel):
                 return candidate
 
         return project_default
+            # Use configured path (can be absolute or relative)
+            path = Path(self.path)
+            if not path.is_absolute():
+                # If relative, resolve from the repo root for deterministic behavior.
+                path = _default_repo_root() / path
+            return path.resolve()
+        else:
+            # Default: <repo_root>/skills
+            return _default_repo_root() / "skills"
 
     def get_skill_container_path(self, skill_name: str, category: str = "public") -> str:
         """

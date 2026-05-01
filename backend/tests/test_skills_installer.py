@@ -9,7 +9,6 @@ import pytest
 
 from deerflow.skills.installer import (
     SkillSecurityScanError,
-    install_skill_from_archive,
     is_symlink_member,
     is_unsafe_zip_member,
     resolve_skill_dir_from_archive,

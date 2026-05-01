@@ -16,7 +16,6 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from deerflow.skills.security_scanner import scan_skill_content
 from deerflow.skills.loader import get_skills_root_path
 from deerflow.skills.security_scanner import scan_skill_content
-from deerflow.skills.validation import _validate_skill_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -293,12 +292,3 @@ def _run_async_install(coro):
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             return executor.submit(asyncio.run, coro).result()
     return asyncio.run(coro)
-
-
-def install_skill_from_archive(
-    zip_path: str | Path,
-    *,
-    skills_root: Path | None = None,
-) -> dict:
-    """Install a skill from a .skill archive (ZIP)."""
-    return _run_async_install(ainstall_skill_from_archive(zip_path, skills_root=skills_root))
