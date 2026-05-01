@@ -23,6 +23,7 @@ class SkillsConfig(BaseModel):
     path: str | None = Field(
         default=None,
         description=("Path to skills directory. If not specified, defaults to `skills` under the caller project root, falling back to the legacy repo-root location for monorepo compatibility."),
+        description="Path to skills directory. If not specified, defaults to skills under the caller project root.",
     )
     container_path: str = Field(
         default="/mnt/skills",
@@ -66,6 +67,7 @@ class SkillsConfig(BaseModel):
         else:
             # Default: <repo_root>/skills
             return _default_repo_root() / "skills"
+        return project_root() / "skills"
 
     def get_skill_container_path(self, skill_name: str, category: str = "public") -> str:
         """
