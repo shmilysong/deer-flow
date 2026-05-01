@@ -89,7 +89,7 @@ def get_subagent_config(name: str) -> SubagentConfig | None:
 
     app_config = get_subagents_app_config()
     is_builtin = name in BUILTIN_SUBAGENTS
-    agent_override = app_config.agents.get(name)
+    agent_override = subagents_config.agents.get(name)
 
     overrides = {}
 
@@ -121,7 +121,7 @@ def get_subagent_config(name: str) -> SubagentConfig | None:
         overrides["max_turns"] = app_config.max_turns
 
     # Model: per-agent override only (no global default for model)
-    effective_model = app_config.get_model_for(name)
+    effective_model = subagents_config.get_model_for(name)
     if effective_model is not None and effective_model != config.model:
         logger.debug("Subagent '%s': model overridden (%s -> %s)", name, config.model, effective_model)
         overrides["model"] = effective_model

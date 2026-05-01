@@ -598,6 +598,15 @@ def _get_memory_context(agent_name: str | None = None, *, app_config: AppConfig 
         from deerflow.config.memory_config import get_memory_config
         from deerflow.runtime.user_context import get_effective_user_id
 
+        from deerflow.runtime.user_context import get_effective_user_id
+
+        if app_config is None:
+            from deerflow.config.memory_config import get_memory_config
+
+            config = get_memory_config()
+        else:
+            config = app_config.memory
+
         if not config.enabled or not config.injection_enabled:
             return ""
 

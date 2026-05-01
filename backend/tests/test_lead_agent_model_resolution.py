@@ -364,6 +364,16 @@ def test_build_middlewares_passes_explicit_app_config_to_shared_factory(monkeypa
     )
     monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda **kwargs: None)
     monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
+    monkeypatch.setattr(
+        lead_agent_module,
+        "TitleMiddleware",
+        lambda *, app_config: captured.setdefault("title_app_config", app_config) or "title-middleware",
+    )
+    monkeypatch.setattr(
+        lead_agent_module,
+        "MemoryMiddleware",
+        lambda agent_name=None, *, memory_config: captured.setdefault("memory_config", memory_config) or "memory-middleware",
+    )
 
     middlewares = lead_agent_module._build_middlewares(
         {"configurable": {"is_plan_mode": False, "subagent_enabled": False}},
@@ -374,6 +384,8 @@ def test_build_middlewares_passes_explicit_app_config_to_shared_factory(monkeypa
     assert captured == {
         "app_config": app_config,
         "lazy_init": True,
+        "title_app_config": app_config,
+        "memory_config": app_config.memory,
     }
     assert middlewares[0] == "base-middleware"
 
@@ -446,7 +458,7 @@ def test_create_summarization_middleware_uses_configured_model_alias(monkeypatch
 
     assert captured["name"] == "model-masswork"
     assert captured["thinking_enabled"] is False
-    assert captured["app_config"] is not None
+    assert captured["app_config"] is app_config
     assert middleware["model"] is fake_model
     fake_model.with_config.assert_called_once_with(tags=["middleware:summarize"])
 

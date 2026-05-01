@@ -319,6 +319,7 @@ class TestAgentConstruction:
             return SimpleNamespace(load_skills=lambda *, enabled_only: [SimpleNamespace(name="demo-skill", skill_file=skill_file)])
 
         monkeypatch.setattr(sys.modules["deerflow.skills.storage"], "get_or_new_skill_storage", fake_get_or_new_skill_storage)
+        monkeypatch.setattr("deerflow.skills.storage.get_or_new_skill_storage", fake_get_or_new_skill_storage)
 
         executor = SubagentExecutor(
             config=base_config,
@@ -329,6 +330,7 @@ class TestAgentConstruction:
 
         skills = await executor._load_skills()
         messages = await executor._load_skill_messages(skills)
+        messages = await executor._load_skill_messages()
 
         assert captured["app_config"] is app_config
         assert len(messages) == 1

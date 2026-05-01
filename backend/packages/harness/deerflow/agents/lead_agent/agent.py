@@ -19,8 +19,6 @@ from deerflow.agents.middlewares.view_image_middleware import ViewImageMiddlewar
 from deerflow.agents.thread_state import ThreadState
 from deerflow.config.agents_config import load_agent_config, validate_agent_name
 from deerflow.config.app_config import AppConfig, get_app_config
-from deerflow.config.memory_config import get_memory_config
-from deerflow.config.summarization_config import get_summarization_config
 from deerflow.models import create_chat_model
 from deerflow.skills.tool_policy import filter_tools_by_skill_allowed_tools
 from deerflow.skills.types import Skill
@@ -82,7 +80,7 @@ def _create_summarization_middleware(*, app_config: AppConfig | None = None) -> 
         model = create_chat_model(thinking_enabled=False, app_config=resolved_app_config)
         model = create_chat_model(name=config.model_name, thinking_enabled=False, app_config=app_config)
     else:
-        model = create_chat_model(thinking_enabled=False, app_config=app_config)
+        model = create_chat_model(thinking_enabled=False, app_config=resolved_app_config)
     model = model.with_config(tags=["middleware:summarize"])
 
     # Prepare kwargs
@@ -358,7 +356,9 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
 def make_lead_agent(config: RunnableConfig, app_config: AppConfig | None = None):
 def make_lead_agent(config: RunnableConfig):
     """LangGraph graph factory; keep the signature compatible with LangGraph Server."""
-    return _make_lead_agent(config, app_config=get_app_config())
+    runtime_config = _get_runtime_config(config)
+    runtime_app_config = runtime_config.get("app_config")
+    return _make_lead_agent(config, app_config=runtime_app_config or get_app_config())
 
 
 def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):

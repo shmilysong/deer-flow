@@ -30,6 +30,8 @@ def test_build_self_update_section_present_for_custom_agent():
     assert "<self_update>" in section
     assert "my-agent" in section
     assert "update_agent" in section
+from deerflow.config.subagents_config import CustomSubagentConfig, SubagentsAppConfig
+from deerflow.skills.types import Skill
 
 
 def _set_skills_cache_state(*, skills=None, active=False, version=0):
