@@ -189,6 +189,19 @@ def _submit_to_isolated_loop_in_context(
         return _isolated_subagent_loop
 
 
+def _submit_to_isolated_loop_in_context(
+    context: Context,
+    coro_factory: Callable[[], Coroutine[Any, Any, SubagentResult]],
+) -> Future[SubagentResult]:
+    """Submit a coroutine to the isolated loop while preserving ContextVar state."""
+    return context.run(
+        lambda: asyncio.run_coroutine_threadsafe(
+            coro_factory(),
+            _get_isolated_subagent_loop(),
+        )
+    )
+
+
 def _filter_tools(
     all_tools: list[BaseTool],
     allowed: list[str] | None,
@@ -626,9 +639,9 @@ class SubagentExecutor:
                 parent_context,
                 lambda: self._aexecute(task, result_holder),
         try:
-            future = asyncio.run_coroutine_threadsafe(
-                self._aexecute(task, result_holder),
-                _get_isolated_subagent_loop(),
+            future = _submit_to_isolated_loop_in_context(
+                parent_context,
+                lambda: self._aexecute(task, result_holder),
             )
             return future.result(timeout=self.config.timeout_seconds)
         except FuturesTimeoutError:

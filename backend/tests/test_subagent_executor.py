@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -801,11 +802,19 @@ class TestSyncExecutionPath:
         assert execution_loops[0].is_running()
             with patch.object(executor, "_execute_in_isolated_loop", side_effect=tracked_isolated_execute) as isolated:
                 result = executor.execute("Task")
+        token = set_current_user(SimpleNamespace(id="alice"))
+        try:
+            with patch.object(executor, "_create_agent", return_value=mock_agent):
+                with patch.object(executor, "_execute_in_isolated_loop", side_effect=tracked_isolated_execute) as isolated:
+                    result = executor.execute("Task")
+        finally:
+            reset_current_user(token)
 
         assert isolated.call_count == 1
         assert isolated_helper_threads == [caller_thread]
         assert execution_threads
         assert execution_threads == ["subagent-persistent-loop"]
+        assert effective_user_ids == ["alice"]
         assert result.status == SubagentStatus.COMPLETED
         assert result.result == "Async loop result"
 
