@@ -12,8 +12,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from deerflow.config.runtime_paths import resolve_path
-from deerflow.skills.permissions import make_skill_written_path_sandbox_readable
+from deerflow.config.skills_config import _default_repo_root
 from deerflow.skills.storage.skill_storage import SKILL_MD_FILE, SkillStorage
 from deerflow.skills.types import SkillCategory
 
@@ -45,7 +44,10 @@ class LocalSkillStorage(SkillStorage):
             config = app_config or get_app_config()
             self._host_root: Path = config.skills.get_skills_path()
         else:
-            self._host_root = resolve_path(host_path)
+            path = Path(host_path)
+            if not path.is_absolute():
+                path = _default_repo_root() / path
+            self._host_root = path.resolve()
 
     # ------------------------------------------------------------------
     # Abstract operation implementations
@@ -91,7 +93,6 @@ class LocalSkillStorage(SkillStorage):
             tmp_file.write(content)
             tmp_path = Path(tmp_file.name)
         tmp_path.replace(target)
-        make_skill_written_path_sandbox_readable(self.get_custom_skill_dir(name), target)
 
     async def ainstall_skill_from_archive(self, archive_path: str | Path) -> dict:
         import zipfile
