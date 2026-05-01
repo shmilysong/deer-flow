@@ -309,7 +309,8 @@ class SubagentExecutor:
 
         from deerflow.agents.middlewares.tool_error_handling_middleware import build_subagent_runtime_middlewares
 
-        middlewares = build_subagent_runtime_middlewares(app_config=resolved_app_config, lazy_init=True)
+        # Reuse shared middleware composition with lead agent.
+        middlewares = build_subagent_runtime_middlewares(app_config=app_config, model_name=self.model_name, lazy_init=True)
 
         return create_agent(
             model=model,
