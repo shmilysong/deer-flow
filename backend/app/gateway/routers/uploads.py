@@ -134,8 +134,8 @@ async def _write_upload_file_with_limits(
     uploads_dir: os.PathLike[str] | str,
 async def _write_upload_file_streaming(
     file: UploadFile,
-    file_path: os.PathLike[str] | str,
     *,
+    uploads_dir: os.PathLike[str] | str,
     display_filename: str,
     max_single_file_size: int,
     max_total_size: int,
@@ -146,7 +146,8 @@ async def _write_upload_file_streaming(
     try:
 ) -> tuple[int, int]:
     file_size = 0
-    with open(file_path, "wb") as output:
+    file_path, fh = open_upload_file_no_symlink(uploads_dir, display_filename)
+    try:
         while chunk := await file.read(UPLOAD_CHUNK_SIZE):
             file_size += len(chunk)
             total_size += len(chunk)
@@ -239,7 +240,7 @@ async def upload_files(
             written_paths.append(file_path)
             file_size, total_size = await _write_upload_file_streaming(
                 file,
-                file_path,
+                uploads_dir=uploads_dir,
                 display_filename=safe_filename,
                 max_single_file_size=limits.max_file_size,
                 max_total_size=limits.max_total_size,
