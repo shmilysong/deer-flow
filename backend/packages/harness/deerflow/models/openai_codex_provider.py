@@ -21,7 +21,6 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_openai.chat_models.base import _create_usage_metadata_responses
 
 from deerflow.models.credential_loader import CodexCliCredential, load_codex_cli_credential
 
