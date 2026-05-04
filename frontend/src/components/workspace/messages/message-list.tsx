@@ -302,17 +302,33 @@ export function MessageList({
             );
         {groupMessages(messages, (group) => {
           if (group.type === "human" || group.type === "assistant") {
-            return group.messages.map((msg) => {
-              return (
-                <MessageListItem
-                  key={`${group.id}/${msg.id}`}
-                  threadId={threadId}
-                  message={msg}
-                  isLoading={thread.isLoading}
-                  tokenUsageEnabled={tokenUsageEnabled}
-                />
-              );
-            });
+            return (
+              <div
+                key={group.id}
+                className={cn(
+                  "w-full",
+                  group.type === "assistant" && "group/assistant-turn",
+                )}
+              >
+                {group.messages.map((msg) => {
+                  return (
+                    <MessageListItem
+                      key={`${group.id}/${msg.id}`}
+                      message={msg}
+                      isLoading={thread.isLoading}
+                      threadId={threadId}
+                      showCopyButton={group.type !== "assistant"}
+                    />
+                  );
+                })}
+                {renderTokenUsage({
+                  messages: group.messages,
+                  turnUsageMessages,
+                })}
+                {group.type === "assistant" &&
+                  renderAssistantCopyButton(group.messages)}
+              </div>
+            );
           } else if (group.type === "assistant:clarification") {
             const message = group.messages[0];
             if (message && hasContent(message)) {

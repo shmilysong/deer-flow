@@ -168,6 +168,7 @@ export default function AgentChatPage() {
                 hasMoreHistory={hasMoreHistory}
                 loadMoreHistory={loadMoreHistory}
                 isHistoryLoading={isHistoryLoading}
+                tokenUsageInlineMode={tokenUsageInlineMode}
               />
             </div>
 
