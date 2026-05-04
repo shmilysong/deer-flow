@@ -12,11 +12,13 @@ function TokenUsageSummary({
   inputTokens,
   outputTokens,
   totalTokens,
+  unavailable = false,
 }: {
   className?: string;
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  unavailable?: boolean;
 }) {
   const { t } = useI18n();
 
@@ -31,15 +33,21 @@ function TokenUsageSummary({
         <CoinsIcon className="size-3" />
         {t.tokenUsage.label}
       </span>
-      <span>
-        {t.tokenUsage.input}: {formatTokenCount(inputTokens ?? 0)}
-      </span>
-      <span>
-        {t.tokenUsage.output}: {formatTokenCount(outputTokens ?? 0)}
-      </span>
-      <span className="font-medium">
-        {t.tokenUsage.total}: {formatTokenCount(totalTokens ?? 0)}
-      </span>
+      {!unavailable ? (
+        <>
+          <span>
+            {t.tokenUsage.input}: {formatTokenCount(inputTokens ?? 0)}
+          </span>
+          <span>
+            {t.tokenUsage.output}: {formatTokenCount(outputTokens ?? 0)}
+          </span>
+          <span className="font-medium">
+            {t.tokenUsage.total}: {formatTokenCount(totalTokens ?? 0)}
+          </span>
+        </>
+      ) : (
+        <span>{t.tokenUsage.unavailableShort}</span>
+      )}
     </div>
   );
 }
@@ -47,7 +55,7 @@ function TokenUsageSummary({
 export function MessageTokenUsageList({
   className,
   enabled = false,
-  isLoading: _isLoading = false,
+  isLoading = false,
   messages,
 }: {
   className?: string;
@@ -55,7 +63,7 @@ export function MessageTokenUsageList({
   isLoading?: boolean;
   messages: Message[];
 }) {
-  if (!enabled) {
+  if (!enabled || isLoading) {
     return null;
   }
 
@@ -67,16 +75,13 @@ export function MessageTokenUsageList({
 
   const usage = accumulateUsage(aiMessages);
 
-  if (!usage) {
-    return null;
-  }
-
   return (
     <TokenUsageSummary
       className={className}
-      inputTokens={usage.inputTokens}
-      outputTokens={usage.outputTokens}
-      totalTokens={usage.totalTokens}
+      inputTokens={usage?.inputTokens}
+      outputTokens={usage?.outputTokens}
+      totalTokens={usage?.totalTokens}
+      unavailable={!usage}
     />
   );
 }
