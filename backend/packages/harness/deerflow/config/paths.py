@@ -169,7 +169,7 @@ class Paths:
         return self.user_agent_dir(user_id, agent_name) / "memory.json"
     def user_agent_memory_file(self, user_id: str, agent_name: str) -> Path:
         """Per-user per-agent memory: `{base_dir}/users/{user_id}/agents/{name}/memory.json`."""
-        return self.user_dir(user_id) / "agents" / agent_name.lower() / "memory.json"
+        return self.user_agent_dir(user_id, agent_name) / "memory.json"
 
     def thread_dir(self, thread_id: str, *, user_id: str | None = None) -> Path:
         """

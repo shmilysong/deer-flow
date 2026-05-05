@@ -223,7 +223,7 @@ def main() -> None:
     migrate_memory(paths, user_id="default", dry_run=args.dry_run)
 
     if report:
-        logger.info("Migration report:")
+        logger.info("Thread migration report:")
         for entry in report:
             logger.info("  thread=%s user=%s action=%s", entry["thread_id"], entry["user_id"], entry["action"])
     else:

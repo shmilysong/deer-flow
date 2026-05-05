@@ -456,7 +456,8 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
             groups=agent_config.tool_groups if agent_config else None,
             subagent_enabled=subagent_enabled,
             app_config=resolved_app_config,
-        ),
+        )
+        + extra_tools,
         middleware=_build_middlewares(config, model_name=model_name, agent_name=agent_name, app_config=resolved_app_config),
         system_prompt=apply_prompt_template(
             subagent_enabled=subagent_enabled,

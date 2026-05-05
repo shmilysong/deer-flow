@@ -89,7 +89,7 @@ class TestSetupAgentNoDataLoss:
         agent_dir = tmp_path / "agents" / "test-agent"
         agent_dir.mkdir(parents=True)
         old_soul = agent_dir / "SOUL.md"
-        old_soul.write_text("original soul content")
+        old_soul.write_text("original soul content", encoding="utf-8")
 
         with patch("deerflow.tools.builtins.setup_agent_tool.get_paths", return_value=_make_paths_mock(tmp_path)):
             # Force soul_file.write_text to raise after directory already exists
