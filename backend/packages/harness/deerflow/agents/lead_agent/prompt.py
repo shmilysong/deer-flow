@@ -158,14 +158,26 @@ def _skill_mutability_label(category: SkillCategory | str) -> str:
 def _get_enabled_skills_for_config(app_config: AppConfig | None = None) -> list[Skill]:
     """Return enabled skills using the caller's config source.
 
-    When a concrete ``app_config`` is supplied, bypass the global enabled-skills
-    cache so the skill list and skill paths are resolved from the same config
-    object. This keeps request-scoped config injection consistent even while the
-    release branch still supports global fallback paths.
+    When a concrete ``app_config`` is supplied, cache the loaded skills by that
+    config object's identity so request-scoped config injection still resolves
+    skill paths from the matching config without rescanning storage on every
+    agent factory call.
     """
     if app_config is None:
         return _get_enabled_skills()
-    return list(get_or_new_skill_storage(app_config=app_config).load_skills(enabled_only=True))
+
+    cache_key = id(app_config)
+    with _enabled_skills_lock:
+        cached = _enabled_skills_by_config_cache.get(cache_key)
+        if cached is not None:
+            cached_config, cached_skills = cached
+            if cached_config is app_config:
+                return list(cached_skills)
+
+    skills = list(get_or_new_skill_storage(app_config=app_config).load_skills(enabled_only=True))
+    with _enabled_skills_lock:
+        _enabled_skills_by_config_cache[cache_key] = (app_config, skills)
+    return list(skills)
 
 
 def _skill_mutability_label(category: SkillCategory | str) -> str:

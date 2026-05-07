@@ -31,13 +31,14 @@ def test_build_self_update_section_present_for_custom_agent():
     assert "my-agent" in section
     assert "update_agent" in section
 from deerflow.config.subagents_config import CustomSubagentConfig, SubagentsAppConfig
-from deerflow.skills.types import Skill
+from deerflow.skills.types import Skill, SkillCategory
 
 
 def _set_skills_cache_state(*, skills=None, active=False, version=0):
     prompt_module._get_cached_skills_prompt_section.cache_clear()
     with prompt_module._enabled_skills_lock:
         prompt_module._enabled_skills_cache = skills
+        prompt_module._enabled_skills_by_config_cache.clear()
         prompt_module._enabled_skills_refresh_active = active
         prompt_module._enabled_skills_refresh_version = version
         prompt_module._enabled_skills_refresh_event.clear()
