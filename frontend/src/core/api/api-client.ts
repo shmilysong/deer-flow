@@ -6,24 +6,6 @@ import { getLangGraphBaseURL } from "../config";
 
 import { isStateChangingMethod, readCsrfCookie } from "./fetcher";
 import { sanitizeRunStreamOptions } from "./stream-mode";
-import { isStateChangingMethod, readCsrfCookie } from "./fetcher";
-
-/**
- * SDK ``onRequest`` hook that mints the ``X-CSRF-Token`` header from the
- * live ``csrf_token`` cookie just before each outbound fetch.
- */
-function injectCsrfHeader(_url: URL, init: RequestInit): RequestInit {
-  if (!isStateChangingMethod(init.method ?? "GET")) {
-    return init;
-  }
-  const token = readCsrfCookie();
-  if (!token) return init;
-  const headers = new Headers(init.headers);
-  if (!headers.has("X-CSRF-Token")) {
-    headers.set("X-CSRF-Token", token);
-  }
-  return { ...init, headers };
-}
 
 /**
  * SDK ``onRequest`` hook that mints the ``X-CSRF-Token`` header from the

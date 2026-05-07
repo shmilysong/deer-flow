@@ -88,27 +88,22 @@ services:
     build:
       context: ../
       dockerfile: frontend/Dockerfile
-      target: dev
+      target: prod
       args:
         PNPM_STORE_PATH: ${PNPM_STORE_PATH:-/root/.local/share/pnpm/store}
         NPM_REGISTRY: ${NPM_REGISTRY:-}
     container_name: deer-flow-frontend
-    command: sh -c "cd frontend && pnpm run dev > /app/logs/frontend.log 2>&1"
+    command: sh -c "cd frontend && pnpm start > /app/logs/frontend.log 2>&1"
     volumes:
-      - ../frontend/src:/app/frontend/src
-      - ../frontend/public:/app/frontend/public
-      - ../frontend/next.config.js:/app/frontend/next.config.js:ro
       - ../logs:/app/logs
-      # Mount pnpm store for caching
-      - ${PNPM_STORE_PATH:-~/.local/share/pnpm/store}:/root/.local/share/pnpm/store
     working_dir: /app
     environment:
-      - NODE_ENV=development
-      - WATCHPACK_POLLING=true
-      - CI=true
+      - NODE_ENV=production
       - DEER_FLOW_INTERNAL_GATEWAY_BASE_URL=http://gateway:8001
     env_file:
-      - ../frontend/.env
+      - ../.env
+    mem_limit: 2g
+    memswap_limit: 2g
     networks:
       - deer-flow-dev
     restart: unless-stopped
