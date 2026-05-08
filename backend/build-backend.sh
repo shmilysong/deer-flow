@@ -45,10 +45,11 @@ echo "  ✓ PyInstaller 已安装"
 
 # ── 编译 ────────────────────────────────────────────────────────────────────
 echo "[3/4] 编译 Gateway 二进制（耗时约 5-15 分钟）..."
-.venv/bin/python -m PyInstaller --onedir \
+.venv/bin/python -m PyInstaller --onedir --noconfirm \
     --name deerflow-gateway \
     --paths . \
     --paths packages/harness \
+    --add-data "../deerflow_extensions:deerflow_extensions" \
     \
     --hidden-import=app \
     --hidden-import=app.gateway \

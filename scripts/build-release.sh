@@ -16,7 +16,6 @@
 #   - scripts/                  (启动脚本)
 #   - nginx/                    (Nginx 配置)
 #   - config/                   (配置模板)
-#   - deerflow_extensions/      (可选扩展)
 #   - backend/extensions_config.json  (MCP 配置)
 #   - config.yaml               (填 key 即用，含 supports_thinking: true)
 #   - docker/nginx/             (serve.sh 需要的 nginx 配置)
@@ -53,7 +52,7 @@ fi
 # ── 创建目录结构 ────────────────────────────────────────────────────────────
 
 echo "[2/9] 创建目录结构..."
-mkdir -p "$RELEASE_DIR"/{frontend,backend-bin,skills,scripts,nginx,config,deerflow_extensions,ads-agent-mcp}
+mkdir -p "$RELEASE_DIR"/{frontend,backend-bin,skills,scripts,nginx,config,ads-agent-mcp}
 
 # ── 编译前端 ────────────────────────────────────────────────────────────────
 
@@ -96,10 +95,11 @@ echo "  安装 PyInstaller 到项目 .venv..."
 .venv/bin/pip install pyinstaller --quiet
 
 echo "  编译 Gateway 二进制（耗时 5-15 分钟）..."
-.venv/bin/python -m PyInstaller --onedir \
+.venv/bin/python -m PyInstaller --onedir --noconfirm \
     --name deerflow-gateway \
     --paths . \
     --paths packages/harness \
+    --add-data "../deerflow_extensions:deerflow_extensions" \
     \
     --hidden-import=app \
     --hidden-import=app.gateway \
@@ -380,7 +380,7 @@ title:
 
 data_collection:
   enabled: true
-  output_dir: /data/deerflow/training_logs
+  output_dir: ./data_collection_logs
 
 subagents:
   enabled: false
@@ -402,17 +402,6 @@ tools:
     timeout: 10
 CONFIGEOF
 echo "  ✓ config.yaml 已生成（含 supports_thinking: true，填 key 即可用）"
-
-# ── 复制 deerflow_extensions ───────────────────────────────────────────────
-
-echo "  复制 deerflow_extensions..."
-if [ -d "deerflow_extensions" ]; then
-    rsync -av --no-g --no-o \
-        --exclude='__pycache__' \
-        --exclude='*.pyc' \
-        --exclude='.git' \
-        deerflow_extensions/ "$RELEASE_DIR/deerflow_extensions/" || true
-fi
 
 # ── ADS MCP（可选组件）───────────────────────────────────────────────────────
 

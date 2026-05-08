@@ -17,10 +17,10 @@ _backend_root = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
 if _backend_root not in sys.path:
     sys.path.insert(0, _backend_root)
 
-# ── deerflow_extensions (sys.path monkey-patch) ─────────────────────────────
-_ext_dir = os.path.normpath(os.path.join(_backend_root, "..", "deerflow_extensions"))
-if os.path.isdir(_ext_dir) and _ext_dir not in sys.path:
-    sys.path.insert(0, _ext_dir)
+# ── deerflow_extensions (`--add-data` 打包进 _internal/) ────────────────────
+_ext_internal = os.path.normpath(os.path.join(_backend_root, "deerflow_extensions"))
+if os.path.isdir(_ext_internal) and _ext_internal not in sys.path:
+    sys.path.insert(0, _ext_internal)
 
 # =============================================================================
 # 1. Self-owned Model Providers (7)
