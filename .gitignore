@@ -65,6 +65,7 @@ config.yaml.bak
 /frontend/playwright-report/
 .gstack/
 .worktrees
+release/
 
 .trae/
 ads-agent-mcp/
