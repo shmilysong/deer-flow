@@ -13,7 +13,7 @@ from typing import Any
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "enabled": True,
-    "output_dir": "/data/deerflow/training_logs",
+    "output_dir": "./data_collection_logs",
     "buffer_size": 500,
     "flush_interval_sec": 5.0,
     "max_file_size_mb": 100,
@@ -69,7 +69,8 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
         from deerflow.config.app_config import get_app_config
 
         app_cfg = get_app_config()
-        dc = app_cfg.get("data_collection", {})
+        app_cfg_dict = app_cfg.model_dump() if hasattr(app_cfg, "model_dump") else {}
+        dc = app_cfg_dict.get("data_collection", {})
         if dc:
             config.update(dc)
     except Exception:

@@ -475,7 +475,9 @@ MCPEOF
 if [ "$ADS_ENABLED" = "true" ] && [ "$DEEPRAG_ENABLED" != "true" ]; then
     sed -i 's/},$/}/' "$MCP_CONFIG_FILE"
 fi
-echo "  ✓ extensions_config.json 已生成（使用相对路径）"
+# 同时复制到 release 根目录，确保 PyInstaller 二进制能从 project_root() 找到
+cp "$MCP_CONFIG_FILE" "$RELEASE_DIR/extensions_config.json"
+echo "  ✓ extensions_config.json 已生成（使用相对路径，同时已复制到 release 根目录）"
 
 # ── 完成 ────────────────────────────────────────────────────────────────────
 
