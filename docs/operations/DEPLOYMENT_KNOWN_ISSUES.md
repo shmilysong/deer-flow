@@ -243,5 +243,55 @@ cd /usr/xccloud/deerflow
 
 ---
 
+## 8. 编译产物优化（v3.0）
+
+### 8.1 前端源码暴露
+
+**现象**：release 中包含 `src/`、`styles/`、`tsconfig.json` 等前端源码文件。
+
+**根因**：`build-release.sh` 直接 `cp -r` 复制了整个前端目录。
+
+**修复**：`build-release.sh` 第 3 步只复制 `.next/`、`public/`、`package.json` 和 `pnpm-lock.yaml`。`node_modules` 不再 `cp -r`，改为在 release 目录执行 `pnpm install --frozen-lockfile --prod`。
+
+### 8.2 后端源码暴露
+
+**现象**：release 中后端 `.py` 文件直接可读。
+
+**根因**：Python 是解释型语言，无法像 Node.js 一样"编译"出产物。
+
+**修复**：新增 PyInstaller 编译方案：
+```
+backend/build-backend.sh  # 编译脚本
+backend/deerflow_entry.py # 入口脚本（显式导入所有反射路径）
+```
+
+编译后产物为 `dist/deerflow-gateway/`：
+- `deerflow-gateway` — ELF 可执行文件（含嵌入式 Python 解释器）
+- `_internal/` — 仅 `.pyc` / `.so`，无 `.py` 源码
+
+**启动方式**：
+```bash
+DEER_FLOW_CONFIG_PATH=/path/to/config.yaml ./deerflow-gateway/deerflow-gateway
+```
+
+### 8.3 后端非必需文件进入 release
+
+**现象**：release 中包含 `tests/`、`docs/`、`Makefile`、`README.md` 等。
+
+**修复**：`build-release.sh` 第 4 步新增排除规则：
+```
+--exclude='tests/' --exclude='docs/' --exclude='Makefile'
+--exclude='AGENTS.md' --exclude='CLAUDE.md'
+--exclude='CONTRIBUTING.md' --exclude='README.md'
+```
+
+### 8.4 后端 `.venv` 体积过大
+
+**现象**：`release/backend/.venv/` 约 800MB，且跨平台不兼容。
+
+**修复**：启用 PyInstaller 后不再需要 `.venv`。编译产物的 `_internal/` 已包含所有依赖。
+
+---
+
 **最后更新**：2026-05-08
-**关联文件**：`scripts/build-release.sh`
+**关联文件**：`scripts/build-release.sh`、`backend/build-backend.sh`、`backend/deerflow_entry.py`

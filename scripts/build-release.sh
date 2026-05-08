@@ -9,14 +9,18 @@
 # 包含所有需要部署到服务器的产物。
 #
 # 产物清单：
-#   - frontend/.next/          (Next.js 生产构建)
-#   - backend/                 (Python 源码 + .venv)
-#   - skills/                  (Agent skills)
-#   - ads-agent-mcp/           (可选 ADS MCP)
-#   - scripts/                 (启动脚本)
-#   - nginx/                   (Nginx 配置)
-#   - config/                  (配置模板)
-#   - deerflow_extensions/     (可选扩展)
+#   - frontend/                 (Next.js 生产构建 + 生产依赖，无源码)
+#   - backend-bin/              (PyInstaller 编译产物：二进制 + _internal/，无 .py 源码)
+#   - skills/                   (Agent skills)
+#   - ads-agent-mcp/            (可选 ADS MCP)
+#   - scripts/                  (启动脚本)
+#   - nginx/                    (Nginx 配置)
+#   - config/                   (配置模板)
+#   - deerflow_extensions/      (可选扩展)
+#   - backend/extensions_config.json  (MCP 配置)
+#   - config.yaml               (填 key 即用，含 supports_thinking: true)
+#   - docker/nginx/             (serve.sh 需要的 nginx 配置)
+#   - .env                      (环境变量，需部署后创建)
 #
 # 产物输出到：$(pwd)/release/
 #
@@ -49,7 +53,7 @@ fi
 # ── 创建目录结构 ────────────────────────────────────────────────────────────
 
 echo "[2/9] 创建目录结构..."
-mkdir -p "$RELEASE_DIR"/{frontend,backend,skills,scripts,nginx,config,deerflow_extensions,ads-agent-mcp}
+mkdir -p "$RELEASE_DIR"/{frontend,backend-bin,skills,scripts,nginx,config,deerflow_extensions,ads-agent-mcp}
 
 # ── 编译前端 ────────────────────────────────────────────────────────────────
 
@@ -63,52 +67,193 @@ fi
 
 SKIP_ENV_VALIDATION=1 pnpm build
 
-echo "  复制前端构建产物..."
+echo "  复制前端构建产物（仅运行时所需，无源码）..."
 cp -r .next "$RELEASE_DIR/frontend/"
 cp -r public "$RELEASE_DIR/frontend/"
 cp package.json "$RELEASE_DIR/frontend/"
 cp pnpm-lock.yaml "$RELEASE_DIR/frontend/"
 cp next.config.js "$RELEASE_DIR/frontend/"
-cp tsconfig.json "$RELEASE_DIR/frontend/"
-cp postcss.config.js "$RELEASE_DIR/frontend/"
-cp components.json "$RELEASE_DIR/frontend/"
-cp -r src "$RELEASE_DIR/frontend/"
-cp -r styles "$RELEASE_DIR/frontend/"
 cp .env.example "$RELEASE_DIR/frontend/.env"
-echo "  复制前端 node_modules（运行时依赖）..."
-cp -r node_modules "$RELEASE_DIR/frontend/"
+# 只复制运行时必需的 src/env.js（next.config.js 在运行时 import 它）
+mkdir -p "$RELEASE_DIR/frontend/src"
+cp src/env.js "$RELEASE_DIR/frontend/src/env.js"
+echo "  安装前端生产依赖（在 release 目录重新安装，避免 pnpm 硬链接断裂）..."
+cd "$RELEASE_DIR/frontend"
+pnpm install --frozen-lockfile --prod 2>&1
+cd "$REPO_ROOT"
 
 cd "$REPO_ROOT"
 
-# ── 编译后端 ────────────────────────────────────────────────────────────────
+# ── 编译后端（PyInstaller → 二进制）────────────────────────────────────────
 
-echo "[4/9] 编译后端 (Python + uv)..."
+echo "[4/9] 编译后端 (PyInstaller → 二进制、无源码)..."
 cd "$REPO_ROOT/backend"
 
 echo "  安装后端依赖 (uv sync)..."
 uv sync
 
-echo "  复制后端源码..."
-rsync -av --no-g --no-o \
-    --exclude='.venv' \
-    --exclude='__pycache__' \
-    --exclude='*.pyc' \
-    --exclude='*.pyo' \
-    --exclude='.ruff_cache' \
-    --exclude='.coverage' \
-    --exclude='*.egg-info' \
-    --exclude='build/' \
-    --exclude='dist/' \
-    --exclude='wheels/' \
-    --exclude='.langgraph_api' \
-    --exclude='log/' \
-    --exclude='.deer-flow/' \
-    --exclude='.claude/' \
-    --exclude='.ads-mcp/' \
-    . "$RELEASE_DIR/backend/" || true
+echo "  安装 PyInstaller 到项目 .venv..."
+.venv/bin/pip install pyinstaller --quiet
 
-echo "  复制 Python 虚拟环境..."
-cp -r .venv "$RELEASE_DIR/backend/"
+echo "  编译 Gateway 二进制（耗时 5-15 分钟）..."
+.venv/bin/python -m PyInstaller --onedir \
+    --name deerflow-gateway \
+    --paths . \
+    --paths packages/harness \
+    \
+    --hidden-import=app \
+    --hidden-import=app.gateway \
+    --hidden-import=app.gateway.app \
+    --hidden-import=app.gateway.deps \
+    --hidden-import=app.gateway.config \
+    --hidden-import=app.gateway.authz \
+    --hidden-import=app.gateway.services \
+    --hidden-import=app.gateway.auth_middleware \
+    --hidden-import=app.gateway.csrf_middleware \
+    --hidden-import=app.gateway.internal_auth \
+    --hidden-import=app.gateway.langgraph_auth \
+    --hidden-import=app.gateway.path_utils \
+    --hidden-import=app.gateway.utils \
+    --hidden-import=app.gateway.routers \
+    --hidden-import=app.gateway.routers.agents \
+    --hidden-import=app.gateway.routers.artifacts \
+    --hidden-import=app.gateway.routers.assistants_compat \
+    --hidden-import=app.gateway.routers.auth \
+    --hidden-import=app.gateway.routers.channels \
+    --hidden-import=app.gateway.routers.feedback \
+    --hidden-import=app.gateway.routers.mcp \
+    --hidden-import=app.gateway.routers.memory \
+    --hidden-import=app.gateway.routers.models \
+    --hidden-import=app.gateway.routers.runs \
+    --hidden-import=app.gateway.routers.skills \
+    --hidden-import=app.gateway.routers.suggestions \
+    --hidden-import=app.gateway.routers.thread_runs \
+    --hidden-import=app.gateway.routers.threads \
+    --hidden-import=app.gateway.routers.uploads \
+    --hidden-import=app.gateway.auth \
+    --hidden-import=app.gateway.auth.repositories \
+    --hidden-import=app.gateway.auth.repositories.base \
+    --hidden-import=app.gateway.auth.repositories.sqlite \
+    --hidden-import=app.channels \
+    --hidden-import=app.channels.service \
+    --hidden-import=app.channels.manager \
+    --hidden-import=app.channels.base \
+    --hidden-import=app.channels.commands \
+    --hidden-import=app.channels.message_bus \
+    --hidden-import=app.channels.store \
+    --hidden-import=app.channels.dingtalk \
+    --hidden-import=app.channels.discord \
+    --hidden-import=app.channels.feishu \
+    --hidden-import=app.channels.slack \
+    --hidden-import=app.channels.telegram \
+    --hidden-import=app.channels.wechat \
+    --hidden-import=app.channels.wecom \
+    \
+    --hidden-import=langchain_openai \
+    --hidden-import=langchain_anthropic \
+    --hidden-import=langchain_deepseek \
+    --hidden-import=langchain_google_genai \
+    \
+    --hidden-import=deerflow.models.patched_openai \
+    --hidden-import=deerflow.models.patched_deepseek \
+    --hidden-import=deerflow.models.patched_minimax \
+    --hidden-import=deerflow.models.vllm_provider \
+    --hidden-import=deerflow.models.mindie_provider \
+    --hidden-import=deerflow.models.claude_provider \
+    --hidden-import=deerflow.models.openai_codex_provider \
+    \
+    --hidden-import=deerflow.sandbox.local \
+    --hidden-import=deerflow.sandbox.tools \
+    --hidden-import=deerflow.community.aio_sandbox \
+    \
+    --hidden-import=deerflow.community.ddg_search \
+    --hidden-import=deerflow.community.serper \
+    --hidden-import=deerflow.community.tavily \
+    --hidden-import=deerflow.community.infoquest \
+    --hidden-import=deerflow.community.exa \
+    --hidden-import=deerflow.community.firecrawl \
+    --hidden-import=deerflow.community.jina_ai \
+    --hidden-import=deerflow.community.image_search \
+    \
+    --hidden-import=deerflow.tools.builtins \
+    --hidden-import=deerflow.tools.builtins.tool_search \
+    --hidden-import=deerflow.tools.skill_manage_tool \
+    --hidden-import=deerflow.tools.builtins.invoke_acp_agent_tool \
+    \
+    --hidden-import=deerflow.guardrails.builtin \
+    --hidden-import=deerflow.skills.storage.local_skill_storage \
+    \
+    --hidden-import=deerflow.runtime \
+    --hidden-import=deerflow.runtime.converters \
+    --hidden-import=deerflow.runtime.journal \
+    --hidden-import=deerflow.runtime.serialization \
+    --hidden-import=deerflow.runtime.user_context \
+    --hidden-import=deerflow.runtime.checkpointer \
+    --hidden-import=deerflow.runtime.checkpointer.async_provider \
+    --hidden-import=deerflow.runtime.checkpointer.provider \
+    --hidden-import=deerflow.runtime.events \
+    --hidden-import=deerflow.runtime.events.store \
+    --hidden-import=deerflow.runtime.events.store.base \
+    --hidden-import=deerflow.runtime.events.store.db \
+    --hidden-import=deerflow.runtime.events.store.jsonl \
+    --hidden-import=deerflow.runtime.events.store.memory \
+    --hidden-import=deerflow.runtime.runs \
+    --hidden-import=deerflow.runtime.runs.manager \
+    --hidden-import=deerflow.runtime.runs.schemas \
+    --hidden-import=deerflow.runtime.runs.worker \
+    --hidden-import=deerflow.runtime.runs.store \
+    --hidden-import=deerflow.runtime.runs.store.base \
+    --hidden-import=deerflow.runtime.runs.store.memory \
+    --hidden-import=deerflow.runtime.store \
+    --hidden-import=deerflow.runtime.store.async_provider \
+    --hidden-import=deerflow.runtime.store.provider \
+    --hidden-import=deerflow.runtime.store._sqlite_utils \
+    --hidden-import=deerflow.runtime.stream_bridge \
+    --hidden-import=deerflow.runtime.stream_bridge.async_provider \
+    --hidden-import=deerflow.runtime.stream_bridge.base \
+    --hidden-import=deerflow.runtime.stream_bridge.memory \
+    \
+    --hidden-import=deerflow.persistence \
+    --hidden-import=deerflow.persistence.base \
+    --hidden-import=deerflow.persistence.engine \
+    --hidden-import=deerflow.persistence.feedback \
+    --hidden-import=deerflow.persistence.feedback.model \
+    --hidden-import=deerflow.persistence.feedback.sql \
+    --hidden-import=deerflow.persistence.models \
+    --hidden-import=deerflow.persistence.models.run_event \
+    --hidden-import=deerflow.persistence.run \
+    --hidden-import=deerflow.persistence.run.model \
+    --hidden-import=deerflow.persistence.run.sql \
+    --hidden-import=deerflow.persistence.thread_meta \
+    --hidden-import=deerflow.persistence.thread_meta.base \
+    --hidden-import=deerflow.persistence.thread_meta.memory \
+    --hidden-import=deerflow.persistence.thread_meta.model \
+    --hidden-import=deerflow.persistence.thread_meta.sql \
+    --hidden-import=deerflow.persistence.user \
+    --hidden-import=deerflow.persistence.user.model \
+    \
+    --hidden-import=langchain \
+    --hidden-import=langchain_core \
+    --hidden-import=langgraph \
+    --hidden-import=langgraph.runtime \
+    \
+    --collect-submodules=langchain \
+    --collect-submodules=langchain_core \
+    --collect-submodules=langgraph \
+    --collect-submodules=deerflow \
+    \
+    --exclude-module=tests \
+    --exclude-module=docs \
+    --exclude-module=tkinter \
+    --exclude-module=matplotlib \
+    \
+    deerflow_entry.py 2>&1
+
+echo "  复制编译产物到 release/backend-bin/..."
+mkdir -p "$RELEASE_DIR/backend-bin"
+cp -r "$REPO_ROOT/backend/dist/deerflow-gateway" "$RELEASE_DIR/backend-bin/"
+# 清理编译中间文件
+rm -rf "$REPO_ROOT/backend/dist" "$REPO_ROOT/backend/build" "$REPO_ROOT/backend/deerflow-gateway.spec"
 
 cd "$REPO_ROOT"
 
@@ -294,6 +439,7 @@ fi
 # ── 生成 backend MCP 配置文件（相对路径）─────────────────────────────────────
 
 echo "[9/9] 生成 backend/extensions_config.json（相对路径）..."
+mkdir -p "$RELEASE_DIR/backend"
 MCP_CONFIG_FILE="$RELEASE_DIR/backend/extensions_config.json"
 ADS_ENABLED=false
 ADS_DESCRIPTION="ADS MCP Server for cloud desktop management"
@@ -321,7 +467,7 @@ cat > "$MCP_CONFIG_FILE" << MCPEOF
       "command": "node",
       "args": ["../ads-agent-mcp/dist/index.js"],
       "env": {
-        "ADS_API_BASE_URL": "http://192.168.1.139:80",
+        "ADS_API_BASE_URL": "http://127.0.0.1:80",
         "ADS_CONFIG_PATH": "../ads-agent-mcp/.ads-mcp/config.json"
       },
       "description": "'$ADS_DESCRIPTION'"
@@ -377,8 +523,10 @@ echo "     → extensions_config.json 中的 args 指向 /app/ads-mcp/"
 echo "     → 必须改为服务器实际路径或相对路径 ../ads-agent-mcp/"
 echo ""
 echo "  3. 前端启动失败（Module not found: @/...）"
-echo "     → tsconfig.json 缺失，需一并复制到前端目录"
+echo "     → 检查 release/frontend/ 是否缺少 package.json 或 node_modules"
+echo "     → 脚本已自动执行 pnpm install --prod"
 echo ""
-echo "  4. 服务器 .venv 不可用"
-echo "     → 开发机与服务器架构/OS 必须一致"
+echo "  4. 后端 PyInstaller 编译"
+echo "     → cd backend && bash build-backend.sh"
+echo "     → 产物: dist/deerflow-gateway/（ELF 二进制，无 .py 源码）"
 echo ""
