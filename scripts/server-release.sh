@@ -68,8 +68,9 @@ env DEER_FLOW_CONFIG_PATH="$DEER_FLOW_CONFIG_PATH" \
 echo "✓ Gateway 已就绪 (localhost:8001)"
 
 echo "启动 Frontend (端口 3000)..."
-PORT=3000 node .next/standalone/server.js \
+cd frontend && PORT=3000 node .next/standalone/server.js \
     > ../logs/frontend.log 2>&1 &
+cd ..
 
 ./scripts/wait-for-port.sh 3000 120 "Frontend" || {
     echo "✗ Frontend 启动失败，查看日志: tail -30 logs/frontend.log"
