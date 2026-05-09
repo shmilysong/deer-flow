@@ -13,13 +13,14 @@
 #   - backend-bin/              (PyInstaller 编译产物：二进制 + _internal/，无 .py 源码)
 #   - skills/                   (Agent skills)
 #   - ads-agent-mcp/            (可选 ADS MCP)
-#   - scripts/                  (启动脚本)
+#   - scripts/                  (服务管理：deerflow.sh + wait-for-port.sh)
 #   - nginx/                    (Nginx 配置)
-#   - config/                   (配置模板)
-#   - backend/extensions_config.json  (MCP 配置)
-#   - config.yaml               (填 key 即用，含 supports_thinking: true)
-#   - docker/nginx/             (serve.sh 需要的 nginx 配置)
-#   - .env                      (环境变量，需部署后创建)
+#   - config.yaml               (主配置，直接拷贝项目根目录 config.yaml)
+#   - config.example.yaml       (配置模板)
+#   - extensions_config.json    (MCP 配置，直接拷贝项目根目录 extensions_config.json)
+#   - extensions_config.example.json  (MCP 配置模板)
+#   - .env.example              (环境变量模板)
+#   - README.md                 (部署使用说明)
 #
 # 产物输出到：$(pwd)/release/
 #
@@ -45,18 +46,18 @@ echo ""
 # ── 清理旧产物 ──────────────────────────────────────────────────────────────
 
 if [ -d "$RELEASE_DIR" ]; then
-    echo "[1/9] 清理旧产物..."
+    echo "[1/10] 清理旧产物..."
     rm -rf "$RELEASE_DIR"
 fi
 
 # ── 创建目录结构 ────────────────────────────────────────────────────────────
 
-echo "[2/9] 创建目录结构..."
-mkdir -p "$RELEASE_DIR"/{frontend,backend-bin,skills,scripts,nginx,config,ads-agent-mcp}
+echo "[2/10] 创建目录结构..."
+mkdir -p "$RELEASE_DIR"/{frontend,backend-bin,skills,scripts,nginx,ads-agent-mcp}
 
 # ── 编译前端 ────────────────────────────────────────────────────────────────
 
-echo "[3/9] 编译前端 (Next.js)..."
+echo "[3/10] 编译前端 (Next.js)..."
 cd "$REPO_ROOT/frontend"
 
 if [ ! -d "node_modules" ]; then
@@ -85,7 +86,7 @@ cd "$REPO_ROOT"
 
 # ── 编译后端（PyInstaller → 二进制）────────────────────────────────────────
 
-echo "[4/9] 编译后端 (PyInstaller → 二进制、无源码)..."
+echo "[4/10] 编译后端 (PyInstaller → 二进制、无源码)..."
 cd "$REPO_ROOT/backend"
 
 echo "  安装后端依赖 (uv sync)..."
@@ -259,7 +260,7 @@ cd "$REPO_ROOT"
 
 # ── 复制 Skills ─────────────────────────────────────────────────────────────
 
-echo "[5/9] 复制 Skills..."
+echo "[5/10] 复制 Skills..."
 rsync -av --no-g --no-o \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
@@ -267,145 +268,46 @@ rsync -av --no-g --no-o \
 
 # ── 复制脚本 ───────────────────────────────────────────────────────────────
 
-echo "[6/9] 复制启动脚本..."
-cp scripts/serve.sh "$RELEASE_DIR/scripts/"
+echo "[6/10] 复制启动脚本..."
+cp scripts/server-release.sh "$RELEASE_DIR/scripts/deerflow.sh"
 cp scripts/wait-for-port.sh "$RELEASE_DIR/scripts/"
-cp scripts/config-upgrade.sh "$RELEASE_DIR/scripts/"
-cp scripts/cleanup-containers.sh "$RELEASE_DIR/scripts/"
 chmod +x "$RELEASE_DIR/scripts/"*.sh
 
 # ── 适配并复制 Nginx 配置 ───────────────────────────────────────────────────
 
-echo "[7/9] 生成 Nginx 配置..."
-cat docker/nginx/nginx.local.conf > "$RELEASE_DIR/nginx/nginx.conf"
-# serve.sh 读取的是 docker/nginx/nginx.local.conf（以自身路径为基准）
-mkdir -p "$RELEASE_DIR/docker/nginx"
-cp docker/nginx/nginx.local.conf "$RELEASE_DIR/docker/nginx/nginx.local.conf"
+echo "[7/10] 生成 Nginx 配置..."
+cp "$REPO_ROOT/docker/nginx/nginx.local.conf" "$RELEASE_DIR/nginx/nginx.conf"
 
-# ── 复制配置模板 ────────────────────────────────────────────────────────────
+# ── 复制配置文件 ────────────────────────────────────────────────────────────
 
-echo "  复制配置模板..."
-cp config.example.yaml "$RELEASE_DIR/config/"
-cp extensions_config.example.json "$RELEASE_DIR/config/"
-# 复制到根目录（serve.sh 的 config-upgrade.sh 需要）
-cp config.example.yaml "$RELEASE_DIR/config.example.yaml"
+echo "[8/10] 复制配置文件..."
 
-# ── 生成完整可用的 config.yaml ─────────────────────────────────────────────
-
-echo "  生成 release/config.yaml（填 key 即可用）..."
-SKILLS_PATH="$RELEASE_DIR/skills"
-if [ -n "$DEER_FLOW_SKILLS_PATH" ]; then
-    SKILLS_PATH="$DEER_FLOW_SKILLS_PATH"
+# 复制主配置
+cp "$REPO_ROOT/config.yaml" "$RELEASE_DIR/config.yaml"
+cp "$REPO_ROOT/config.example.yaml" "$RELEASE_DIR/config.example.yaml"
+# 修正 skills.path 为相对路径
+if grep -q '^skills:$' "$RELEASE_DIR/config.yaml"; then
+    sed -i '/^skills:$/a\  path: ./skills' "$RELEASE_DIR/config.yaml"
+else
+    echo -e "\nskills:\n  path: ./skills" >> "$RELEASE_DIR/config.yaml"
 fi
+echo "  ✓ config.yaml 已复制（skills.path 已设为 ./skills）"
 
-# 读取项目根目录现有 config.yaml，提取已启用的模型列表
-MODEL_BLOCK=""
-if [ -f "$REPO_ROOT/config.yaml" ]; then
-    # 查找非注释的模型定义（跳过 # 开头的行）
-    IN_MODELS=false
-    MODEL_LINES=""
-    while IFS= read -r line; do
-        # 如果遇到 models: 开始收集
-        if echo "$line" | grep -q "^models:"; then
-            IN_MODELS=true
-            continue
-        fi
-        # 如果遇到非 models 区域的顶级 key，停止
-        if $IN_MODELS && echo "$line" | grep -qP "^(sandbox|skills|tools|tool_groups|title|data_collection|subagents|checkpointer|log_level|token_usage|config_version):"; then
-            IN_MODELS=false
-            break
-        fi
-        if $IN_MODELS; then
-            # 跳过注释行
-            if echo "$line" | grep -qP "^\s*#"; then
-                continue
-            fi
-            # 去掉注释后缀
-            clean_line=$(echo "$line" | sed 's/ *#.*$//')
-            MODEL_LINES="$MODEL_LINES"$'\n'"$clean_line"
-        fi
-    done < "$REPO_ROOT/config.yaml"
+# 复制 MCP 配置
+cp "$REPO_ROOT/extensions_config.json" "$RELEASE_DIR/extensions_config.json"
+# 修正 ADS 路径和 URL（保留端口）
+sed -i 's|/app/ads-mcp/|../ads-agent-mcp/|g' "$RELEASE_DIR/extensions_config.json"
+sed -E -i 's|https?://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)|http://127.0.0.1\1|g' "$RELEASE_DIR/extensions_config.json"
+cp "$REPO_ROOT/extensions_config.example.json" "$RELEASE_DIR/extensions_config.example.json"
+echo "  ✓ extensions_config.json 已复制（URL 已修正为 127.0.0.1，含 example 模板）"
 
-    # 检查是否已有 supports_thinking，如果没有添加到第一个模型
-    if echo "$MODEL_LINES" | grep -q "supports_thinking"; then
-        MODEL_BLOCK="$MODEL_LINES"
-    else
-        # 在第一个模型的 api_key 行后插入 supports_thinking: true
-        MODEL_BLOCK=$(echo "$MODEL_LINES" | sed '0,/api_key:.*/{
-    /api_key:.*/a\
-    supports_thinking: true
-}')
-    fi
-
-    # 保存 $ 符号（否则无引号 heredoc 会吃掉环境变量引用）
-    MODEL_BLOCK_ESCAPED=$(echo "$MODEL_BLOCK" | sed 's/\$/DOLLARSIGN/g')
-fi
-
-# 如果实在没解析到模型配置，使用默认
-if [ -z "$MODEL_BLOCK" ]; then
-    MODEL_BLOCK='  - name: deepseek-chat
-    display_name: DeepSeek / deepseek-chat
-    use: langchain_deepseek:ChatDeepSeek
-    model: deepseek-chat
-    api_key: $DEEPSEEK_API_KEY
-    supports_thinking: true
-    timeout: 600.0
-    max_retries: 2'
-fi
-
-if [ -z "$MODEL_BLOCK_ESCAPED" ]; then
-    MODEL_BLOCK_ESCAPED="$MODEL_BLOCK"
-fi
-
-cat > "$RELEASE_DIR/config.yaml" << CONFIGEOF
-config_version: 8
-log_level: info
-
-token_usage:
-  enabled: false
-
-models:
-$(echo "$MODEL_BLOCK_ESCAPED" | sed 's/DOLLARSIGN/$/g')
-
-sandbox:
-  use: deerflow.sandbox.local:LocalSandboxProvider
-  allow_host_bash: true
-
-skills:
-  path: $SKILLS_PATH
-  container_path: /mnt/skills
-
-title:
-  enabled: false
-
-data_collection:
-  enabled: true
-  output_dir: ./data_collection_logs
-
-subagents:
-  enabled: false
-
-tool_groups:
-  - name: web
-  - name: file:read
-  - name: file:write
-  - name: bash
-
-tools:
-  - name: web_search
-    group: web
-    use: deerflow.community.ddg_search.tools:web_search_tool
-    max_results: 5
-  - name: web_fetch
-    group: web
-    use: deerflow.community.jina_ai.tools:web_fetch_tool
-    timeout: 10
-CONFIGEOF
-echo "  ✓ config.yaml 已生成（含 supports_thinking: true，填 key 即可用）"
+# 复制 .env.example（不拷贝 .env，避免泄露敏感信息）
+cp "$REPO_ROOT/.env.example" "$RELEASE_DIR/.env.example"
+echo "  ✓ .env.example 已复制（部署后请根据模板创建 .env）"
 
 # ── ADS MCP（可选组件）───────────────────────────────────────────────────────
 
-echo "[8/9] ADS MCP..."
+echo "[9/10] ADS MCP..."
 ADS_MCP_DIR="${REPO_ROOT}/ads-agent-mcp"
 if [ -d "$ADS_MCP_DIR" ]; then
     echo "  检测到 ADS MCP..."
@@ -419,65 +321,29 @@ if [ -d "$ADS_MCP_DIR" ]; then
             --exclude='__pycache__' \
             --exclude='.git' \
             "$ADS_MCP_DIR/" "$RELEASE_DIR/ads-agent-mcp/" || true
+        # 修正 ADS 服务器地址为 127.0.0.1，清理 token
+        ADS_CONFIG="$RELEASE_DIR/ads-agent-mcp/.ads-mcp/config.json"
+        if [ -f "$ADS_CONFIG" ]; then
+            sed -i 's|http://[0-9.]*:[0-9]*|http://127.0.0.1:80|g' "$ADS_CONFIG"
+            sed -i 's|"value": *"[^"]*"|"value": ""|g' "$ADS_CONFIG"
+            sed -i 's|"password": *"[^"]*"|"password": ""|g' "$ADS_CONFIG"
+            echo "  ✓ ADS config 已清理（url=127.0.0.1:80, token/password 已清除）"
+        fi
         echo "  ✓ ADS MCP 复制完成"
     fi
 else
     echo "  ⏩ 未检测到 ADS MCP（deer-flow/ads-agent-mcp/ 不存在），跳过"
 fi
 
-# ── 生成 backend MCP 配置文件（相对路径）─────────────────────────────────────
+# ── 复制使用文档 ────────────────────────────────────────────────────────────
 
-echo "[9/9] 生成 backend/extensions_config.json（相对路径）..."
-mkdir -p "$RELEASE_DIR/backend"
-MCP_CONFIG_FILE="$RELEASE_DIR/backend/extensions_config.json"
-ADS_ENABLED=false
-ADS_DESCRIPTION="ADS MCP Server for cloud desktop management"
-DEEPRAG_ENABLED=false
-DEEPRAG_DESCRIPTION="DeepRAG 知识库检索"
-
-# 检测 ADS MCP 是否已复制到 release
-if [ -f "$RELEASE_DIR/ads-agent-mcp/dist/index.js" ]; then
-    ADS_ENABLED=true
+echo "[10/10] 生成 README.md（部署使用说明）..."
+if [ -f "$REPO_ROOT/docs/operations/USE_GUIDE.md" ]; then
+    cp "$REPO_ROOT/docs/operations/USE_GUIDE.md" "$RELEASE_DIR/README.md"
+    echo "  ✓ README.md 已生成"
+else
+    echo "  ⚠️  docs/operations/USE_GUIDE.md 不存在，跳过"
 fi
-
-# 检测项目源目录中的 extensions_config.json 是否有 deeprag 配置
-if grep -q '"deeprag"' "$REPO_ROOT/extensions_config.json" 2>/dev/null; then
-    DEEPRAG_ENABLED=true
-    DEEPRAG_URL=$(grep -A5 '"deeprag"' "$REPO_ROOT/extensions_config.json" | grep '"url"' | head -1 | sed 's/.*"url": *"\(.*\)",*/\1/')
-    DEEPRAG_DESC=$(grep -A8 '"deeprag"' "$REPO_ROOT/extensions_config.json" | grep '"description"' | head -1 | sed 's/.*"description": *"\(.*\)",*/\1/')
-fi
-
-cat > "$MCP_CONFIG_FILE" << MCPEOF
-{
-  "mcpServers": {
-    $(if [ "$ADS_ENABLED" = "true" ]; then echo '"ads": {
-      "enabled": true,
-      "type": "stdio",
-      "command": "node",
-      "args": ["../ads-agent-mcp/dist/index.js"],
-      "env": {
-        "ADS_API_BASE_URL": "http://127.0.0.1:80",
-        "ADS_CONFIG_PATH": "../ads-agent-mcp/.ads-mcp/config.json"
-      },
-      "description": "'$ADS_DESCRIPTION'"
-    },'; fi)
-    $(if [ "$DEEPRAG_ENABLED" = "true" ]; then echo '"deeprag": {
-      "enabled": true,
-      "type": "http",
-      "url": "'$DEEPRAG_URL'",
-      "description": "'$DEEPRAG_DESC'"
-    }'; fi)
-  },
-  "skills": {}
-}
-MCPEOF
-# 清理尾部多余逗号（如果 ADS 开启而 DeepRAG 没开，或反之）
-if [ "$ADS_ENABLED" = "true" ] && [ "$DEEPRAG_ENABLED" != "true" ]; then
-    sed -i 's/},$/}/' "$MCP_CONFIG_FILE"
-fi
-# 同时复制到 release 根目录，确保 PyInstaller 二进制能从 project_root() 找到
-cp "$MCP_CONFIG_FILE" "$RELEASE_DIR/extensions_config.json"
-echo "  ✓ extensions_config.json 已生成（使用相对路径，同时已复制到 release 根目录）"
 
 # ── 完成 ────────────────────────────────────────────────────────────────────
 
@@ -497,7 +363,7 @@ echo "     rsync -avz --progress $RELEASE_DIR/ user@192.168.1.56:/usr/xccloud/de
 echo ""
 echo "  2. 在服务器上配置并启动："
 echo "     cd /usr/xccloud/deerflow"
-echo "     cp config/config.example.yaml config.yaml"
+echo "     cp config.example.yaml config.yaml"
 echo "     vim config.yaml  # 编辑 API keys + 添加 supports_thinking: true"
 echo "     vim extensions_config.json  # 修改 ADS MCP 路径（如需要）"
 echo "     ./scripts/serve.sh --prod"
