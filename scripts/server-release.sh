@@ -34,6 +34,7 @@ mkdir -p logs
 if [ "$ACTION" = "stop" ]; then
     echo "正在停止 DeerFlow 服务..."
     pkill -f "deerflow-gateway" 2>/dev/null || true
+    pkill -f "server\.js" 2>/dev/null || true
     pkill -f "next start" 2>/dev/null || true
     sleep 1
     kill -9 $(lsof -ti :8001) 2>/dev/null || true
@@ -45,6 +46,7 @@ fi
 # ── 启动 ──────────────────────────────────────────────────────────────────
 
 pkill -f "deerflow-gateway" 2>/dev/null || true
+pkill -f "server\.js" 2>/dev/null || true
 pkill -f "next start" 2>/dev/null || true
 sleep 1
 
@@ -66,9 +68,8 @@ env DEER_FLOW_CONFIG_PATH="$DEER_FLOW_CONFIG_PATH" \
 echo "✓ Gateway 已就绪 (localhost:8001)"
 
 echo "启动 Frontend (端口 3000)..."
-cd frontend && npx next start --port 3000 \
+PORT=3000 node .next/standalone/server.js \
     > ../logs/frontend.log 2>&1 &
-cd ..
 
 ./scripts/wait-for-port.sh 3000 120 "Frontend" || {
     echo "✗ Frontend 启动失败，查看日志: tail -30 logs/frontend.log"

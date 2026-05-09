@@ -16,6 +16,7 @@ const withNextra = nextra({});
 
 /** @type {import("next").NextConfig} */
 const config = {
+  output: "standalone",
   i18n: {
     locales: ["en", "zh"],
     defaultLocale: "en",

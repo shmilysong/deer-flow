@@ -177,7 +177,7 @@ INFO:     Uvicorn running on http://0.0.0.0:8001
 
 ```bash
 cd /path/to/release/frontend
-npx next start --port 3000
+PORT=3000 node .next/standalone/server.js
 ```
 
 启动成功日志：

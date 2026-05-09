@@ -9,7 +9,7 @@
 # 包含所有需要部署到服务器的产物。
 #
 # 产物清单：
-#   - frontend/                 (Next.js 生产构建 + 生产依赖，无源码)
+#   - frontend/                 (Next.js 生产构建，standalone 模式，无 node_modules)
 #   - backend-bin/              (PyInstaller 编译产物：二进制 + _internal/，无 .py 源码)
 #   - skills/                   (Agent skills)
 #   - ads-agent-mcp/            (可选 ADS MCP)
@@ -57,7 +57,7 @@ mkdir -p "$RELEASE_DIR"/{frontend,backend-bin,skills,scripts,nginx,ads-agent-mcp
 
 # ── 编译前端 ────────────────────────────────────────────────────────────────
 
-echo "[3/10] 编译前端 (Next.js)..."
+echo "[3/10] 编译前端 (Next.js, standalone 模式)..."
 cd "$REPO_ROOT/frontend"
 
 if [ ! -d "node_modules" ]; then
@@ -67,20 +67,14 @@ fi
 
 SKIP_ENV_VALIDATION=1 pnpm build
 
-echo "  复制前端构建产物（仅运行时所需，无源码）..."
+echo "  复制前端构建产物（standalone 模式 = 无源码 + 无 node_modules）..."
 cp -r .next "$RELEASE_DIR/frontend/"
 cp -r public "$RELEASE_DIR/frontend/"
-cp package.json "$RELEASE_DIR/frontend/"
-cp pnpm-lock.yaml "$RELEASE_DIR/frontend/"
+# standalone 模式需要 next.config.js（运行时读取 rewrites 等路由配置）
 cp next.config.js "$RELEASE_DIR/frontend/"
-cp .env.example "$RELEASE_DIR/frontend/.env"
-# 只复制运行时必需的 src/env.js（next.config.js 在运行时 import 它）
+# 运行时必需的 src/env.js（next.config.js import 它）
 mkdir -p "$RELEASE_DIR/frontend/src"
 cp src/env.js "$RELEASE_DIR/frontend/src/env.js"
-echo "  安装前端生产依赖（在 release 目录重新安装，避免 pnpm 硬链接断裂）..."
-cd "$RELEASE_DIR/frontend"
-pnpm install --frozen-lockfile --prod 2>&1
-cd "$REPO_ROOT"
 
 cd "$REPO_ROOT"
 
