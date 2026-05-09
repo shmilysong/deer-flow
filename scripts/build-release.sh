@@ -3,7 +3,13 @@
 # build-release.sh — 一键编译 DeerFlow 部署产物（2026-05-07 新版架构）
 #
 # 用法：
-#   ./scripts/build-release.sh
+#   ./scripts/build-release.sh              # 完整构建（前端 + 后端 PyInstaller）
+#   ./scripts/build-release.sh --skip-backend  # 仅构建前端，后端到服务器上编译
+#
+#   # 在服务器上编译后端：
+#   # 1. rsync -avz --progress backend/ user@server:/usr/xccloud/deerflow/backend/
+#   # 2. ssh 到服务器，执行:
+#   #    cd /usr/xccloud/deerflow && bash backend/scripts/build-backend-on-server.sh
 #
 # 执行后在当前目录生成 release/ 目录，
 # 包含所有需要部署到服务器的产物。
@@ -14,7 +20,7 @@
 #   - skills/                   (Agent skills)
 #   - ads-agent-mcp/            (可选 ADS MCP)
 #   - scripts/                  (服务管理：deerflow.sh + wait-for-port.sh)
-#   - nginx/                    (Nginx 配置)
+#   - nginx/                    (Nginx 配置：server.conf 放入 /etc/nginx/conf.d/)
 #   - config.yaml               (主配置，直接拷贝项目根目录 config.yaml)
 #   - config.example.yaml       (配置模板)
 #   - extensions_config.json    (MCP 配置，直接拷贝项目根目录 extensions_config.json)
@@ -32,6 +38,14 @@ cd "$REPO_ROOT"
 
 RELEASE_DIR="${RELEASE_DIR:-$(pwd)/release}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+SKIP_BACKEND=false
+for arg in "$@"; do
+    case "$arg" in
+        --skip-backend) SKIP_BACKEND=true ;;
+        *) echo "未知参数: $arg"; exit 1 ;;
+    esac
+done
 
 echo "=========================================="
 echo "  DeerFlow Release Builder"
@@ -80,175 +94,187 @@ cd "$REPO_ROOT"
 
 # ── 编译后端（PyInstaller → 二进制）────────────────────────────────────────
 
-echo "[4/10] 编译后端 (PyInstaller → 二进制、无源码)..."
-cd "$REPO_ROOT/backend"
+if [ "$SKIP_BACKEND" = true ]; then
+    echo "[4/10] ⏩ 跳过后端编译 (--skip-backend)"
+    echo "  提醒: 在服务器上执行 backend/scripts/build-backend-on-server.sh 编译后端"
+    echo "        然后将 backend-bin/ 传回 release/ 目录"
+    # 创建空目录占位
+    mkdir -p "$RELEASE_DIR/backend-bin"
+else
+    echo "[4/10] 编译后端 (PyInstaller → 二进制、无源码)..."
+    cd "$REPO_ROOT/backend"
 
-echo "  安装后端依赖 (uv sync)..."
-uv sync
+    echo "  安装后端依赖 (uv sync)..."
+    uv sync
 
-echo "  安装 PyInstaller 到项目 .venv..."
-.venv/bin/pip install pyinstaller --quiet
+    echo "  安装 PyInstaller 到项目 .venv..."
+    .venv/bin/pip install pyinstaller --quiet
 
-echo "  编译 Gateway 二进制（耗时 5-15 分钟）..."
-.venv/bin/python -m PyInstaller --onedir --noconfirm \
-    --name deerflow-gateway \
-    --paths . \
-    --paths packages/harness \
-    --add-data "../deerflow_extensions:deerflow_extensions" \
-    \
-    --hidden-import=app \
-    --hidden-import=app.gateway \
-    --hidden-import=app.gateway.app \
-    --hidden-import=app.gateway.deps \
-    --hidden-import=app.gateway.config \
-    --hidden-import=app.gateway.authz \
-    --hidden-import=app.gateway.services \
-    --hidden-import=app.gateway.auth_middleware \
-    --hidden-import=app.gateway.csrf_middleware \
-    --hidden-import=app.gateway.internal_auth \
-    --hidden-import=app.gateway.langgraph_auth \
-    --hidden-import=app.gateway.path_utils \
-    --hidden-import=app.gateway.utils \
-    --hidden-import=app.gateway.routers \
-    --hidden-import=app.gateway.routers.agents \
-    --hidden-import=app.gateway.routers.artifacts \
-    --hidden-import=app.gateway.routers.assistants_compat \
-    --hidden-import=app.gateway.routers.auth \
-    --hidden-import=app.gateway.routers.channels \
-    --hidden-import=app.gateway.routers.feedback \
-    --hidden-import=app.gateway.routers.mcp \
-    --hidden-import=app.gateway.routers.memory \
-    --hidden-import=app.gateway.routers.models \
-    --hidden-import=app.gateway.routers.runs \
-    --hidden-import=app.gateway.routers.skills \
-    --hidden-import=app.gateway.routers.suggestions \
-    --hidden-import=app.gateway.routers.thread_runs \
-    --hidden-import=app.gateway.routers.threads \
-    --hidden-import=app.gateway.routers.uploads \
-    --hidden-import=app.gateway.auth \
-    --hidden-import=app.gateway.auth.repositories \
-    --hidden-import=app.gateway.auth.repositories.base \
-    --hidden-import=app.gateway.auth.repositories.sqlite \
-    --hidden-import=app.channels \
-    --hidden-import=app.channels.service \
-    --hidden-import=app.channels.manager \
-    --hidden-import=app.channels.base \
-    --hidden-import=app.channels.commands \
-    --hidden-import=app.channels.message_bus \
-    --hidden-import=app.channels.store \
-    --hidden-import=app.channels.dingtalk \
-    --hidden-import=app.channels.discord \
-    --hidden-import=app.channels.feishu \
-    --hidden-import=app.channels.slack \
-    --hidden-import=app.channels.telegram \
-    --hidden-import=app.channels.wechat \
-    --hidden-import=app.channels.wecom \
-    \
-    --hidden-import=langchain_openai \
-    --hidden-import=langchain_anthropic \
-    --hidden-import=langchain_deepseek \
-    --hidden-import=langchain_google_genai \
-    \
-    --hidden-import=deerflow.models.patched_openai \
-    --hidden-import=deerflow.models.patched_deepseek \
-    --hidden-import=deerflow.models.patched_minimax \
-    --hidden-import=deerflow.models.vllm_provider \
-    --hidden-import=deerflow.models.mindie_provider \
-    --hidden-import=deerflow.models.claude_provider \
-    --hidden-import=deerflow.models.openai_codex_provider \
-    \
-    --hidden-import=deerflow.sandbox.local \
-    --hidden-import=deerflow.sandbox.tools \
-    --hidden-import=deerflow.community.aio_sandbox \
-    \
-    --hidden-import=deerflow.community.ddg_search \
-    --hidden-import=deerflow.community.serper \
-    --hidden-import=deerflow.community.tavily \
-    --hidden-import=deerflow.community.infoquest \
-    --hidden-import=deerflow.community.exa \
-    --hidden-import=deerflow.community.firecrawl \
-    --hidden-import=deerflow.community.jina_ai \
-    --hidden-import=deerflow.community.image_search \
-    \
-    --hidden-import=deerflow.tools.builtins \
-    --hidden-import=deerflow.tools.builtins.tool_search \
-    --hidden-import=deerflow.tools.skill_manage_tool \
-    --hidden-import=deerflow.tools.builtins.invoke_acp_agent_tool \
-    \
-    --hidden-import=deerflow.guardrails.builtin \
-    --hidden-import=deerflow.skills.storage.local_skill_storage \
-    \
-    --hidden-import=deerflow.runtime \
-    --hidden-import=deerflow.runtime.converters \
-    --hidden-import=deerflow.runtime.journal \
-    --hidden-import=deerflow.runtime.serialization \
-    --hidden-import=deerflow.runtime.user_context \
-    --hidden-import=deerflow.runtime.checkpointer \
-    --hidden-import=deerflow.runtime.checkpointer.async_provider \
-    --hidden-import=deerflow.runtime.checkpointer.provider \
-    --hidden-import=deerflow.runtime.events \
-    --hidden-import=deerflow.runtime.events.store \
-    --hidden-import=deerflow.runtime.events.store.base \
-    --hidden-import=deerflow.runtime.events.store.db \
-    --hidden-import=deerflow.runtime.events.store.jsonl \
-    --hidden-import=deerflow.runtime.events.store.memory \
-    --hidden-import=deerflow.runtime.runs \
-    --hidden-import=deerflow.runtime.runs.manager \
-    --hidden-import=deerflow.runtime.runs.schemas \
-    --hidden-import=deerflow.runtime.runs.worker \
-    --hidden-import=deerflow.runtime.runs.store \
-    --hidden-import=deerflow.runtime.runs.store.base \
-    --hidden-import=deerflow.runtime.runs.store.memory \
-    --hidden-import=deerflow.runtime.store \
-    --hidden-import=deerflow.runtime.store.async_provider \
-    --hidden-import=deerflow.runtime.store.provider \
-    --hidden-import=deerflow.runtime.store._sqlite_utils \
-    --hidden-import=deerflow.runtime.stream_bridge \
-    --hidden-import=deerflow.runtime.stream_bridge.async_provider \
-    --hidden-import=deerflow.runtime.stream_bridge.base \
-    --hidden-import=deerflow.runtime.stream_bridge.memory \
-    \
-    --hidden-import=deerflow.persistence \
-    --hidden-import=deerflow.persistence.base \
-    --hidden-import=deerflow.persistence.engine \
-    --hidden-import=deerflow.persistence.feedback \
-    --hidden-import=deerflow.persistence.feedback.model \
-    --hidden-import=deerflow.persistence.feedback.sql \
-    --hidden-import=deerflow.persistence.models \
-    --hidden-import=deerflow.persistence.models.run_event \
-    --hidden-import=deerflow.persistence.run \
-    --hidden-import=deerflow.persistence.run.model \
-    --hidden-import=deerflow.persistence.run.sql \
-    --hidden-import=deerflow.persistence.thread_meta \
-    --hidden-import=deerflow.persistence.thread_meta.base \
-    --hidden-import=deerflow.persistence.thread_meta.memory \
-    --hidden-import=deerflow.persistence.thread_meta.model \
-    --hidden-import=deerflow.persistence.thread_meta.sql \
-    --hidden-import=deerflow.persistence.user \
-    --hidden-import=deerflow.persistence.user.model \
-    \
-    --hidden-import=langchain \
-    --hidden-import=langchain_core \
-    --hidden-import=langgraph \
-    --hidden-import=langgraph.runtime \
-    \
-    --collect-submodules=langchain \
-    --collect-submodules=langchain_core \
-    --collect-submodules=langgraph \
-    --collect-submodules=deerflow \
-    \
-    --exclude-module=tests \
-    --exclude-module=docs \
-    --exclude-module=tkinter \
-    --exclude-module=matplotlib \
-    \
-    deerflow_entry.py 2>&1
+    echo "  注册 app 包和 harness 子包..."
+    .venv/bin/pip install -e . --no-deps --quiet
+    .venv/bin/pip install -e packages/harness --quiet
 
-echo "  复制编译产物到 release/backend-bin/..."
-mkdir -p "$RELEASE_DIR/backend-bin"
-cp -r "$REPO_ROOT/backend/dist/deerflow-gateway" "$RELEASE_DIR/backend-bin/"
-# 清理编译中间文件
-rm -rf "$REPO_ROOT/backend/dist" "$REPO_ROOT/backend/build" "$REPO_ROOT/backend/deerflow-gateway.spec"
+    echo "  编译 Gateway 二进制（耗时 5-15 分钟）..."
+    .venv/bin/python -m PyInstaller --onedir --noconfirm \
+        --name deerflow-gateway \
+        --paths . \
+        --paths packages/harness \
+        --add-data "../deerflow_extensions:deerflow_extensions" \
+        \
+        --hidden-import=app \
+        --hidden-import=app.gateway \
+        --hidden-import=app.gateway.app \
+        --hidden-import=app.gateway.deps \
+        --hidden-import=app.gateway.config \
+        --hidden-import=app.gateway.authz \
+        --hidden-import=app.gateway.services \
+        --hidden-import=app.gateway.auth_middleware \
+        --hidden-import=app.gateway.csrf_middleware \
+        --hidden-import=app.gateway.internal_auth \
+        --hidden-import=app.gateway.langgraph_auth \
+        --hidden-import=app.gateway.path_utils \
+        --hidden-import=app.gateway.utils \
+        --hidden-import=app.gateway.routers \
+        --hidden-import=app.gateway.routers.agents \
+        --hidden-import=app.gateway.routers.artifacts \
+        --hidden-import=app.gateway.routers.assistants_compat \
+        --hidden-import=app.gateway.routers.auth \
+        --hidden-import=app.gateway.routers.channels \
+        --hidden-import=app.gateway.routers.feedback \
+        --hidden-import=app.gateway.routers.mcp \
+        --hidden-import=app.gateway.routers.memory \
+        --hidden-import=app.gateway.routers.models \
+        --hidden-import=app.gateway.routers.runs \
+        --hidden-import=app.gateway.routers.skills \
+        --hidden-import=app.gateway.routers.suggestions \
+        --hidden-import=app.gateway.routers.thread_runs \
+        --hidden-import=app.gateway.routers.threads \
+        --hidden-import=app.gateway.routers.uploads \
+        --hidden-import=app.gateway.auth \
+        --hidden-import=app.gateway.auth.repositories \
+        --hidden-import=app.gateway.auth.repositories.base \
+        --hidden-import=app.gateway.auth.repositories.sqlite \
+        --hidden-import=app.channels \
+        --hidden-import=app.channels.service \
+        --hidden-import=app.channels.manager \
+        --hidden-import=app.channels.base \
+        --hidden-import=app.channels.commands \
+        --hidden-import=app.channels.message_bus \
+        --hidden-import=app.channels.store \
+        --hidden-import=app.channels.dingtalk \
+        --hidden-import=app.channels.discord \
+        --hidden-import=app.channels.feishu \
+        --hidden-import=app.channels.slack \
+        --hidden-import=app.channels.telegram \
+        --hidden-import=app.channels.wechat \
+        --hidden-import=app.channels.wecom \
+        \
+        --hidden-import=langchain_openai \
+        --hidden-import=langchain_anthropic \
+        --hidden-import=langchain_deepseek \
+        --hidden-import=langchain_google_genai \
+        \
+        --hidden-import=deerflow.models.patched_openai \
+        --hidden-import=deerflow.models.patched_deepseek \
+        --hidden-import=deerflow.models.patched_minimax \
+        --hidden-import=deerflow.models.vllm_provider \
+        --hidden-import=deerflow.models.mindie_provider \
+        --hidden-import=deerflow.models.claude_provider \
+        --hidden-import=deerflow.models.openai_codex_provider \
+        \
+        --hidden-import=deerflow.sandbox.local \
+        --hidden-import=deerflow.sandbox.tools \
+        --hidden-import=deerflow.community.aio_sandbox \
+        \
+        --hidden-import=deerflow.community.ddg_search \
+        --hidden-import=deerflow.community.serper \
+        --hidden-import=deerflow.community.tavily \
+        --hidden-import=deerflow.community.infoquest \
+        --hidden-import=deerflow.community.exa \
+        --hidden-import=deerflow.community.firecrawl \
+        --hidden-import=deerflow.community.jina_ai \
+        --hidden-import=deerflow.community.image_search \
+        \
+        --hidden-import=deerflow.tools.builtins \
+        --hidden-import=deerflow.tools.builtins.tool_search \
+        --hidden-import=deerflow.tools.skill_manage_tool \
+        --hidden-import=deerflow.tools.builtins.invoke_acp_agent_tool \
+        \
+        --hidden-import=deerflow.guardrails.builtin \
+        --hidden-import=deerflow.skills.storage.local_skill_storage \
+        \
+        --hidden-import=deerflow.runtime \
+        --hidden-import=deerflow.runtime.converters \
+        --hidden-import=deerflow.runtime.journal \
+        --hidden-import=deerflow.runtime.serialization \
+        --hidden-import=deerflow.runtime.user_context \
+        --hidden-import=deerflow.runtime.checkpointer \
+        --hidden-import=deerflow.runtime.checkpointer.async_provider \
+        --hidden-import=deerflow.runtime.checkpointer.provider \
+        --hidden-import=deerflow.runtime.events \
+        --hidden-import=deerflow.runtime.events.store \
+        --hidden-import=deerflow.runtime.events.store.base \
+        --hidden-import=deerflow.runtime.events.store.db \
+        --hidden-import=deerflow.runtime.events.store.jsonl \
+        --hidden-import=deerflow.runtime.events.store.memory \
+        --hidden-import=deerflow.runtime.runs \
+        --hidden-import=deerflow.runtime.runs.manager \
+        --hidden-import=deerflow.runtime.runs.schemas \
+        --hidden-import=deerflow.runtime.runs.worker \
+        --hidden-import=deerflow.runtime.runs.store \
+        --hidden-import=deerflow.runtime.runs.store.base \
+        --hidden-import=deerflow.runtime.runs.store.memory \
+        --hidden-import=deerflow.runtime.store \
+        --hidden-import=deerflow.runtime.store.async_provider \
+        --hidden-import=deerflow.runtime.store.provider \
+        --hidden-import=deerflow.runtime.store._sqlite_utils \
+        --hidden-import=deerflow.runtime.stream_bridge \
+        --hidden-import=deerflow.runtime.stream_bridge.async_provider \
+        --hidden-import=deerflow.runtime.stream_bridge.base \
+        --hidden-import=deerflow.runtime.stream_bridge.memory \
+        \
+        --hidden-import=deerflow.persistence \
+        --hidden-import=deerflow.persistence.base \
+        --hidden-import=deerflow.persistence.engine \
+        --hidden-import=deerflow.persistence.feedback \
+        --hidden-import=deerflow.persistence.feedback.model \
+        --hidden-import=deerflow.persistence.feedback.sql \
+        --hidden-import=deerflow.persistence.models \
+        --hidden-import=deerflow.persistence.models.run_event \
+        --hidden-import=deerflow.persistence.run \
+        --hidden-import=deerflow.persistence.run.model \
+        --hidden-import=deerflow.persistence.run.sql \
+        --hidden-import=deerflow.persistence.thread_meta \
+        --hidden-import=deerflow.persistence.thread_meta.base \
+        --hidden-import=deerflow.persistence.thread_meta.memory \
+        --hidden-import=deerflow.persistence.thread_meta.model \
+        --hidden-import=deerflow.persistence.thread_meta.sql \
+        --hidden-import=deerflow.persistence.user \
+        --hidden-import=deerflow.persistence.user.model \
+        \
+        --hidden-import=langchain \
+        --hidden-import=langchain_core \
+        --hidden-import=langgraph \
+        --hidden-import=langgraph.runtime \
+        \
+        --collect-all=langchain \
+        --collect-all=langchain_core \
+        --collect-all=langgraph \
+        --collect-submodules=deerflow \
+        \
+        --exclude-module=tests \
+        --exclude-module=docs \
+        --exclude-module=tkinter \
+        --exclude-module=matplotlib \
+        \
+        deerflow_entry.py 2>&1
+
+    echo "  复制编译产物到 release/backend-bin/..."
+    mkdir -p "$RELEASE_DIR/backend-bin"
+    cp -r "$REPO_ROOT/backend/dist/deerflow-gateway" "$RELEASE_DIR/backend-bin/"
+    # 清理编译中间文件
+    rm -rf "$REPO_ROOT/backend/dist" "$REPO_ROOT/backend/build" "$REPO_ROOT/backend/deerflow-gateway.spec"
+fi
 
 cd "$REPO_ROOT"
 
@@ -270,7 +296,7 @@ chmod +x "$RELEASE_DIR/scripts/"*.sh
 # ── 适配并复制 Nginx 配置 ───────────────────────────────────────────────────
 
 echo "[7/10] 生成 Nginx 配置..."
-cp "$REPO_ROOT/docker/nginx/nginx.local.conf" "$RELEASE_DIR/nginx/nginx.conf"
+cp "$REPO_ROOT/docker/nginx/server.conf" "$RELEASE_DIR/nginx/server.conf"
 
 # ── 复制配置文件 ────────────────────────────────────────────────────────────
 
@@ -355,7 +381,7 @@ du -sh "$RELEASE_DIR"/*
 echo ""
 echo "  下一步："
 echo "  1. 上传到服务器："
-echo "     rsync -avz --progress $RELEASE_DIR/ user@192.168.1.56:/usr/xccloud/deerflow/"
+echo "     rsync -avz --progress -e 'ssh -p 2222' $RELEASE_DIR/ user@192.168.1.56:/usr/xccloud/deerflow/"
 echo ""
 echo "  2. 在服务器上配置并启动："
 echo "     cd /usr/xccloud/deerflow"

@@ -47,3 +47,6 @@ members = ["packages/harness"]
 
 [tool.uv.sources]
 deerflow-harness = { workspace = true }
+
+[tool.setuptools.packages.find]
+include = ["app*", "app.*"]

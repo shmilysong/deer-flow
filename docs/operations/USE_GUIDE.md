@@ -38,7 +38,8 @@ release/
 │   ├── deerflow.sh                 # 服务管理（启动/停止）
 │   └── wait-for-port.sh           # 端口等待（供 deerflow.sh 调用）
 │
-├── nginx/                         # Nginx 配置
+├── nginx/                         # Nginx 配置（放入 /etc/nginx/conf.d/ 即可用）
+│   └── server.conf
 ├── skills/                        # Agent Skills
 ├── ads-agent-mcp/                 # ADS MCP（可选）
 │
@@ -249,12 +250,31 @@ curl -s -o /dev/null -w "Frontend: HTTP %{http_code}" http://localhost:3000/
 |------|------|------|
 | **8001** | Gateway API | 后端 REST API + Agent 运行时 |
 | **3000** | Frontend | 前端 Web 页面 |
-| **2026** | Nginx | 反向代理（如配置） |
+| **2026** | Nginx | 反向代理（可选，见下方说明） |
 
 ### 访问入口
 
 - **直接访问**：`http://服务器IP:3000/`
-- **代理访问**（有 Nginx）：`http://服务器IP:2026/`
+- **代理访问**（配置了 Nginx）：`http://服务器IP:2026/`
+
+### Nginx 反向代理（可选）
+
+如果服务器已有 Nginx，可将 release 中的 Nginx server 块配置挂载到系统 Nginx：
+
+```bash
+# 1. 确认系统 Nginx 已启用 conf.d
+grep 'conf\.d' /etc/nginx/nginx.conf
+# 应输出类似: include /etc/nginx/conf.d/*.conf;
+# 如果没有，手动添加此行到 /etc/nginx/nginx.conf 的 http 块内
+
+# 2. 复制 server 配置到 conf.d
+cp /usr/xccloud/deerflow/nginx/server.conf /etc/nginx/conf.d/deerflow.conf
+
+# 3. 重新加载配置
+nginx -s reload
+```
+
+> **如果没有 Nginx 也不想装**：直接访问 `http://服务器IP:3000/` 即可，`server.conf` 只是提供一个可选的代理入口。
 
 首次访问需完成管理员账户设置（`/setup` 页面）。
 

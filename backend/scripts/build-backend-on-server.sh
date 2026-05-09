@@ -1,58 +1,153 @@
 #!/usr/bin/env bash
 #
-# build-backend.sh — PyInstaller 编译 DeerFlow Gateway 为二进制可执行文件
+# build-backend-on-server.sh — 在目标服务器上编译 PyInstaller 二进制
 #
 # 用法：
-#   cd backend && bash build-backend.sh
+#   1. 在本机构建 release (跳过 PyInstaller 步骤):
+#      ./scripts/build-release.sh --skip-backend
 #
-# 前置条件：
-#   - uv sync 已完成（所有 Python 依赖已安装）
+#   2. 将 release/ 传到服务器:
+#      rsync -avz --progress -e 'ssh -p 2222' release/ root@server:/usr/xccloud/deerflow/
 #
-# 产物：
-#   dist/deerflow-gateway/
-#   ├── deerflow-gateway          ← ELF 可执行文件
-#   └── _internal/                ← 编译后的 .pyc / .so
+#   3. 将 backend + deerflow_extensions 传到服务器:
+#      sudo rsync -avz --progress --no-g --no-o -e 'ssh -p 2222' \
+#        /home/wing/wing/emto/2026/2026.3/DeerFlow/deer-flow/backend/ \
+#        /home/wing/wing/emto/2026/2026.3/DeerFlow/deer-flow/deerflow_extensions \
+#        root@192.168.1.56:/usr/xccloud/deerflow/source/
 #
-# 启动方式：
-#   DEER_FLOW_CONFIG_PATH=/path/to/config.yaml ./dist/deerflow-gateway/deerflow-gateway
+#   4. SSH 到服务器，编译后端:
+#      cd /usr/xccloud/deerflow/source && bash backend/scripts/build-backend-on-server.sh
+#
+#   5. 手动复制产物到 release 目录:
+#      cp -r backend/dist/deerflow-gateway /usr/xccloud/deerflow/backend-bin/
 #
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# 从脚本位置往上找 deerflow_entry.py（确定 backend 根目录）
 cd "$SCRIPT_DIR"
+while [ ! -f "deerflow_entry.py" ] && [ "$(pwd)" != "/" ]; do
+    cd ..
+done
+if [ ! -f "deerflow_entry.py" ]; then
+    echo "✗ 找不到 deerflow_entry.py，脚本应在 backend/scripts/ 下执行"
+    exit 1
+fi
+echo "  项目目录: $(pwd)"
 
 echo "=========================================="
-echo "  DeerFlow Gateway — PyInstaller 编译"
+echo "  DeerFlow Gateway — 服务器端 PyInstaller 编译"
 echo "=========================================="
 echo ""
 
-# ── 检查 deerflow_entry.py 是否存在 ──────────────────────────────────────────
-if [ ! -f "deerflow_entry.py" ]; then
-    echo "✗ deerflow_entry.py 不存在！请在 backend/ 目录下执行此脚本。"
-    exit 1
+# ── 1. 检查 Python 3.12 ────────────────────────────────────────────────────
+
+PYTHON=""
+for candidate in python3.12 python3; do
+    if command -v "$candidate" &>/dev/null; then
+        ver=$("$candidate" --version 2>&1 | grep -oP '3\.12\.\d+') || true
+        if [ -n "$ver" ]; then
+            PYTHON="$candidate"
+            echo "[1/6] ✓ 检测到 Python $ver: $(command -v "$candidate")"
+            break
+        fi
+    fi
+done
+
+# 如果二进制存在但找不到共享库，修复 LD_LIBRARY_PATH 后重试
+if [ -z "$PYTHON" ] && command -v python3.12 &>/dev/null; then
+    ver=$(LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH python3.12 --version 2>&1 | grep -oP '3\.12\.\d+') || true
+    if [ -n "$ver" ]; then
+        export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+        PYTHON="python3.12"
+        echo "[1/6] ✓ 检测到 Python $ver（修复共享库路径后可用）"
+    fi
 fi
 
-# ── 确保依赖已安装 ──────────────────────────────────────────────────────────
-echo "[1/4] 确保 Python 依赖已安装..."
-uv sync --quiet
-echo "  ✓ uv sync 完成"
+if [ -z "$PYTHON" ]; then
+    echo "[1/6] ✗ 未找到 Python 3.12，正在从源码编译安装..."
+    echo "  安装编译依赖..."
+    if command -v dnf &>/dev/null; then
+        dnf install -y --disablerepo=docker-ce-stable \
+            gcc gcc-c++ make openssl-devel bzip2-devel libffi-devel \
+            zlib-devel readline-devel sqlite-devel wget
+    elif command -v yum &>/dev/null; then
+        yum install -y --disablerepo=docker-ce-stable \
+            gcc gcc-c++ make openssl-devel bzip2-devel libffi-devel \
+            zlib-devel readline-devel sqlite-devel wget
+    fi
 
-# ── 安装 PyInstaller ───────────────────────────────────────────────────────
-echo "[2/4] 安装 PyInstaller..."
-.venv/bin/pip install pyinstaller --quiet 2>&1
-# 注册 app 包和 harness 子包（供 PyInstaller 追踪导入链）
-.venv/bin/pip install -e . --no-deps --quiet 2>&1
-.venv/bin/pip install -e packages/harness --quiet 2>&1
+    cd /tmp
+    wget -q https://www.python.org/ftp/python/3.12.9/Python-3.12.9.tgz
+    tar xzf Python-3.12.9.tgz
+    cd Python-3.12.9
+    ./configure --enable-shared --prefix=/usr/local
+    make -j$(nproc)
+    make install
+    # 将 /usr/local/lib 加入动态链接器缓存
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf
+    ldconfig
+    export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+    cd "$OLDPWD"
+    rm -rf /tmp/Python-3.12.9 /tmp/Python-3.12.9.tgz
+    PYTHON="python3.12"
+    echo "  ✓ Python 3.12.9 已安装到 /usr/local"
+fi
+
+# 确保后续所有命令能找到 libpython3.12.so
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+# ── 2. 创建虚拟环境 ───────────────────────────────────────────────────────
+
+echo "[2/6] 创建 Python 虚拟环境..."
+"$PYTHON" -m venv .venv-server
+source .venv-server/bin/activate
+echo "  ✓ 虚拟环境已激活"
+
+# ── 3. 安装 uv ────────────────────────────────────────────────────────────
+
+echo "[3/6] 安装 uv..."
+pip install uv --quiet
+echo "  ✓ uv 已安装"
+
+# ── 4. 安装项目依赖 ──────────────────────────────────────────────────────
+
+echo "[4/6] 安装项目依赖 (uv sync)..."
+uv sync
+echo "  ✓ 依赖已安装"
+
+# ── 5. 安装 PyInstaller ───────────────────────────────────────────────────
+
+echo "[5/6] 安装 PyInstaller..."
+pip install pyinstaller --quiet
+# 注册 app 包和 harness 子包到 Python 包索引（供 PyInstaller 追踪导入链）
+pip install -e . --no-deps --quiet
+pip install -e packages/harness --quiet
 echo "  ✓ PyInstaller 已安装"
 
-# ── 编译 ────────────────────────────────────────────────────────────────────
-echo "[3/4] 编译 Gateway 二进制（耗时约 5-15 分钟）..."
-.venv/bin/python -m PyInstaller --onedir --noconfirm \
+# ── 6. 编译 Gateway 二进制 ────────────────────────────────────────────────
+
+echo "[6/6] 编译 Gateway 二进制（耗时 5-15 分钟）..."
+
+# deerflow_extensions 可选，目录不存在就跳过
+ADD_DATA=""
+if [ -d "../deerflow_extensions" ]; then
+    ADD_DATA="--add-data ../deerflow_extensions:deerflow_extensions"
+elif [ -d "../../deerflow_extensions" ]; then
+    ADD_DATA="--add-data ../../deerflow_extensions:deerflow_extensions"
+elif [ -d "./deerflow_extensions" ]; then
+    ADD_DATA="--add-data ./deerflow_extensions:deerflow_extensions"
+else
+    echo "  ⚠️  未找到 deerflow_extensions，跳过附加数据目录"
+fi
+
+.venv-server/bin/python -m PyInstaller --onedir --noconfirm \
     --name deerflow-gateway \
     --paths . \
     --paths packages/harness \
-    --add-data "../deerflow_extensions:deerflow_extensions" \
+    $ADD_DATA \
     \
     --hidden-import=app \
     --hidden-import=app.gateway \
@@ -203,14 +298,19 @@ echo "[3/4] 编译 Gateway 二进制（耗时约 5-15 分钟）..."
     deerflow_entry.py 2>&1
 
 echo ""
-echo "[4/4] ✓ 编译完成！"
+echo "=========================================="
+echo "  ✓ 编译完成！"
+echo "=========================================="
 echo ""
 echo "  产物: $(pwd)/dist/deerflow-gateway/"
+echo "  大小:"
+du -sh "$(pwd)/dist/deerflow-gateway"
 echo ""
-echo "  启动方式："
-echo "    DEER_FLOW_CONFIG_PATH=/path/to/config.yaml \\"
-echo "      ./dist/deerflow-gateway/deerflow-gateway"
+echo "  验证: ldd dist/deerflow-gateway/_internal/libpython3.12.so.1.0 | grep 'not found'"
 echo ""
-echo "  验证方式："
-echo "    curl http://127.0.0.1:8001/health"
+echo "  ✓ 手动复制到 release 目录:"
+echo "    cp -r dist/deerflow-gateway /usr/xccloud/deerflow/backend-bin/"
 echo ""
+
+# 退出虚拟环境
+deactivate 2>/dev/null || true
