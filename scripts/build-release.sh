@@ -292,6 +292,8 @@ cp "$REPO_ROOT/extensions_config.json" "$RELEASE_DIR/extensions_config.json"
 # 修正 ADS 路径和 URL（保留端口）
 sed -i 's|/app/ads-mcp/|../ads-agent-mcp/|g' "$RELEASE_DIR/extensions_config.json"
 sed -E -i 's|https?://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)|http://127.0.0.1\1|g' "$RELEASE_DIR/extensions_config.json"
+# ADS_API_BASE_URL 在 release 下无用（config.json 优先级更高），删除避免混淆
+sed -i '/ADS_API_BASE_URL/d' "$RELEASE_DIR/extensions_config.json"
 cp "$REPO_ROOT/extensions_config.example.json" "$RELEASE_DIR/extensions_config.example.json"
 echo "  ✓ extensions_config.json 已复制（URL 已修正为 127.0.0.1，含 example 模板）"
 
