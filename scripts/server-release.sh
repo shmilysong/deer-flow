@@ -34,11 +34,19 @@ mkdir -p logs
 if [ "$ACTION" = "stop" ]; then
     echo "正在停止 DeerFlow 服务..."
     pkill -f "deerflow-gateway" 2>/dev/null || true
+    pkill -f "next-server" 2>/dev/null || true
     pkill -f "server\.js" 2>/dev/null || true
-    pkill -f "next start" 2>/dev/null || true
     sleep 1
-    kill -9 $(lsof -ti :8001) 2>/dev/null || true
-    kill -9 $(lsof -ti :3000) 2>/dev/null || true
+    # 强制释放端口（兼容没有 lsof/fuser 的系统，用 kill 强杀）
+    for port in 8001 3000; do
+        pid=$(ss -tlnp 2>/dev/null | grep ":$port " | sed 's/.*pid=\([0-9]*\).*/\1/')
+        [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null || true
+    done
+    sleep 1
+    for port in 8001 3000; do
+        pid=$(ss -tlnp 2>/dev/null | grep ":$port " | sed 's/.*pid=\([0-9]*\).*/\1/')
+        [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null || true
+    done
     echo "✓ 全部服务已停止"
     exit 0
 fi
@@ -46,9 +54,14 @@ fi
 # ── 启动 ──────────────────────────────────────────────────────────────────
 
 pkill -f "deerflow-gateway" 2>/dev/null || true
+pkill -f "next-server" 2>/dev/null || true
 pkill -f "server\.js" 2>/dev/null || true
-pkill -f "next start" 2>/dev/null || true
-sleep 1
+# 清理残留端口
+for port in 8001 3000; do
+    pid=$(ss -tlnp 2>/dev/null | grep ":$port " | sed 's/.*pid=\([0-9]*\).*/\1/')
+    [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null || true
+done
+sleep 2
 
 echo "=========================================="
 echo "  DeerFlow 启动中"
