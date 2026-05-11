@@ -80,6 +80,7 @@ docs/
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
+| 编译部署指南 | `@./docs/operations/BUILD_AND_DEPLOY.md` | 编译方式、56服务器传输、产物清单（主要方式：本机编译前端+56编译后端） |
 | 运维指南 | `@./docs/operations/OPERATIONS.md` | Docker/WSL 内存、502 故障排查 |
 | ADS MCP 集成 | `@./docs/mcp/ADS-MCP对接DeerFlow整合指南-实测版.md` | ADS MCP 对接配置与验证 |
 | DeepRAG MCP 集成 | `@./docs/mcp/DeepRAG_MCP对接DeerFlow整合指南.md` | DeepRAG MCP 对接配置与验证 |
