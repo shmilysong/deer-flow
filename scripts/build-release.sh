@@ -83,6 +83,8 @@ SKIP_ENV_VALIDATION=1 pnpm build
 
 echo "  复制前端构建产物（standalone 模式 = 无源码 + 无 node_modules）..."
 cp -r .next "$RELEASE_DIR/frontend/"
+# standalone 模式：将静态资源复制到 server.js 同级目录下
+cp -r .next/static "$RELEASE_DIR/frontend/.next/standalone/.next/static/"
 cp -r public "$RELEASE_DIR/frontend/"
 # standalone 模式需要 next.config.js（运行时读取 rewrites 等路由配置）
 cp next.config.js "$RELEASE_DIR/frontend/"

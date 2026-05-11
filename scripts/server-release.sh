@@ -13,6 +13,7 @@
 set -e
 
 SELF="$(basename "$0")"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 ACTION="start"
@@ -74,7 +75,7 @@ env DEER_FLOW_CONFIG_PATH="$DEER_FLOW_CONFIG_PATH" \
     ./backend-bin/deerflow-gateway/deerflow-gateway \
     > logs/gateway.log 2>&1 &
 
-./scripts/wait-for-port.sh 8001 30 "Gateway" || {
+"$SCRIPTS_DIR/wait-for-port.sh" 8001 30 "Gateway" || {
     echo "✗ Gateway 启动失败，查看日志: tail -30 logs/gateway.log"
     exit 1
 }
@@ -85,7 +86,7 @@ cd frontend && PORT=3000 node .next/standalone/server.js \
     > ../logs/frontend.log 2>&1 &
 cd ..
 
-./scripts/wait-for-port.sh 3000 120 "Frontend" || {
+"$SCRIPTS_DIR/wait-for-port.sh" 3000 120 "Frontend" || {
     echo "✗ Frontend 启动失败，查看日志: tail -30 logs/frontend.log"
     exit 1
 }
