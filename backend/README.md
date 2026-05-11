@@ -11,26 +11,34 @@ DeerFlow is a LangGraph-based AI super agent with sandbox execution, persistent 
                         │          Nginx (Port 2026)           │
                         │      Unified reverse proxy           │
                         └───────┬──────────────────┬───────────┘
-                                │
-            /api/langgraph/*    │    /api/* (other)
-            rewritten to /api/* │
-                                ▼
-               ┌────────────────────────────────────────┐
-               │        Gateway API (8001)              │
-               │        FastAPI REST + agent runtime    │
-               │                                        │
-               │ Models, MCP, Skills, Memory, Uploads,  │
-               │ Artifacts, Threads, Runs, Streaming    │
-               │                                        │
-               │ ┌────────────────────────────────────┐ │
-               │ │ Lead Agent                         │ │
-               │ │ Middleware Chain, Tools, Subagents │ │
-               │ └────────────────────────────────────┘ │
-               └────────────────────────────────────────┘
+                                │                  │
+              /api/langgraph/*  │                  │  /api/* (other)
+                                ▼                  ▼
+               ┌──────────────────────────────────────────────┐
+               │             Gateway API (8001)               │
+               │  FastAPI REST + LangGraph-compatible runtime │
+               │                                              │
+               │ Models, MCP, Skills, Memory, Uploads,       │
+               │ Artifacts, Threads, Runs, Streaming          │
+               │                                              │
+               │ ┌────────────────┐                           │
+               │ │  Lead Agent    │                           │
+               │ │  ┌──────────┐  │                           │
+               │ │  │Middleware│  │                           │
+               │ │  │  Chain   │  │                           │
+               │ │  └──────────┘  │                           │
+               │ │  ┌──────────┐  │                           │
+               │ │  │  Tools   │  │                           │
+               │ │  └──────────┘  │                           │
+               │ │  ┌──────────┐  │                           │
+               │ │  │Subagents │  │                           │
+               │ │  └──────────┘  │                           │
+               │ └────────────────┘                           │
+               └──────────────────────────────────────────────┘
 ```
 
 **Request Routing** (via Nginx):
-- `/api/langgraph/*` → Gateway LangGraph-compatible API - agent interactions, threads, streaming
+- `/api/langgraph/*` → Gateway API - LangGraph-compatible agent interactions, threads, runs, and streaming translated to native `/api/*` routers
 - `/api/*` (other) → Gateway API - models, MCP, skills, memory, artifacts, uploads, thread-local cleanup
 - `/` (non-API) → Frontend - Next.js web interface
 
@@ -69,7 +77,7 @@ Middlewares execute in strict order, each handling a specific concern:
 Per-thread isolated execution with virtual path translation:
 
 - **Abstract interface**: `execute_command`, `read_file`, `write_file`, `list_dir`
-- **Providers**: `LocalSandboxProvider` (filesystem) and `AioSandboxProvider` (Docker, in community/). Async runtime paths use async sandbox lifecycle hooks so startup, readiness polling, and release do not block the event loop.
+- **Providers**: `LocalSandboxProvider` (filesystem) and `AioSandboxProvider` (Docker, in community/)
 - **Virtual paths**: `/mnt/user-data/{workspace,uploads,outputs}` → thread-specific physical directories
 - **Skills path**: `/mnt/skills` → `deer-flow/skills/` directory
 - **Skills loading**: Recursively discovers nested `SKILL.md` files under `skills/{public,custom}` and preserves nested container paths
@@ -188,7 +196,7 @@ export OPENAI_API_KEY="your-api-key-here"
 **Full Application** (from project root):
 
 ```bash
-make dev  # Starts Gateway + Frontend + Nginx
+make dev  # Starts LangGraph + Gateway + Frontend + Nginx
 ```
 
 Access at: http://localhost:2026
@@ -196,11 +204,14 @@ Access at: http://localhost:2026
 **Backend Only** (from backend directory):
 
 ```bash
-# Gateway API + embedded agent runtime
+# Terminal 1: LangGraph server
 make dev
+
+# Terminal 2: Gateway API
+make gateway
 ```
 
-Direct access: Gateway at http://localhost:8001
+Direct access: LangGraph at http://localhost:2024, Gateway at http://localhost:8001
 
 ---
 
@@ -236,15 +247,11 @@ backend/
 │   └── utils/                  # Utilities
 ├── docs/                       # Documentation
 ├── tests/                      # Test suite
-├── langgraph.json              # LangGraph graph registry for tooling/Studio compatibility
+├── langgraph.json              # LangGraph server configuration
 ├── pyproject.toml              # Python dependencies
 ├── Makefile                    # Development commands
 └── Dockerfile                  # Container build
 ```
-
-`langgraph.json` is not the default service entrypoint.  The scripts and Docker
-deployments run the Gateway embedded runtime; the file is kept for LangGraph
-tooling, Studio, or direct LangGraph Server compatibility.
 
 ---
 
@@ -358,11 +365,10 @@ If a provider is explicitly enabled but required credentials are missing, or the
 
 ```bash
 make install    # Install dependencies
-make dev        # Run Gateway API + embedded agent runtime (port 8001)
-make gateway    # Run Gateway API without reload (port 8001)
+make dev        # Run LangGraph server (port 2024)
+make gateway    # Run Gateway API (port 8001)
 make lint       # Run linter (ruff)
 make format     # Format code (ruff)
-make detect-blocking-io  # Inventory blocking IO that may block the backend event loop
 ```
 
 ### Code Style
@@ -378,18 +384,6 @@ make detect-blocking-io  # Inventory blocking IO that may block the backend even
 ```bash
 uv run pytest
 ```
-
-`make detect-blocking-io` statically scans backend business code for blocking
-IO that may run on the backend event loop and is not test-coverage-bound. It
-prints a concise summary for human review and writes complete JSON findings to
-`.deer-flow/blocking-io-findings.json` at the repository root (regardless of
-whether the target is invoked from the repo root or from `backend/`). JSON
-findings include both broad IO category and review-oriented fields such as
-`priority`, `location`, `blocking_call`, `event_loop_exposure`, `reason`, and
-`code`. `priority` is a deterministic review ordering from the operation type,
-not proof of a bug. Bare-name same-file calls are resolved by function name,
-so duplicate helper names in one file can conservatively over-report async
-reachability.
 
 ---
 
