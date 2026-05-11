@@ -35,15 +35,16 @@ fi
 
 # ── 确保依赖已安装 ──────────────────────────────────────────────────────────
 echo "[1/4] 确保 Python 依赖已安装..."
+# 清理旧虚拟环境，确保每次编译从干净环境开始
+rm -rf .venv
 uv sync --quiet
 echo "  ✓ uv sync 完成"
 
 # ── 安装 PyInstaller ───────────────────────────────────────────────────────
 echo "[2/4] 安装 PyInstaller..."
-.venv/bin/pip install pyinstaller --quiet 2>&1
-# 注册 app 包和 harness 子包（供 PyInstaller 追踪导入链）
-.venv/bin/pip install -e . --no-deps --quiet 2>&1
-.venv/bin/pip install -e packages/harness --quiet 2>&1
+# uv sync 已装好全部依赖，直接装 PyInstaller
+# 不需要 -e .，PyInstaller 通过 --paths . 和 --hidden-import=app 即可追踪
+uv pip install pyinstaller --quiet 2>&1
 echo "  ✓ PyInstaller 已安装"
 
 # ── 编译 ────────────────────────────────────────────────────────────────────

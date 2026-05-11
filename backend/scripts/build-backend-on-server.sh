@@ -101,7 +101,8 @@ export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 # ── 2. 创建虚拟环境 ───────────────────────────────────────────────────────
 
-echo "[2/6] 创建 Python 虚拟环境..."
+echo "[2/6] 创建 Python 虚拟环境（自动清理旧环境）..."
+rm -rf .venv-server
 "$PYTHON" -m venv .venv-server
 source .venv-server/bin/activate
 echo "  ✓ 虚拟环境已激活"
@@ -115,16 +116,21 @@ echo "  ✓ uv 已安装"
 # ── 4. 安装项目依赖 ──────────────────────────────────────────────────────
 
 echo "[4/6] 安装项目依赖 (uv sync)..."
+# 告诉 uv 使用 .venv-server 而非默认的 .venv
+export UV_PROJECT_ENVIRONMENT=.venv-server
 uv sync
+# numpy 2.x 预编译 wheel 需要 x86-64-v2，服务器旧 CPU 不支持
+# 降级到 numpy 1.x（无此要求）
+echo "  降级 numpy 到 1.x（兼容旧 CPU）..."
+uv pip install "numpy<2" --force-reinstall --quiet
 echo "  ✓ 依赖已安装"
 
-# ── 5. 安装 PyInstaller ───────────────────────────────────────────────────
+# ── 5. 安装 PyInstaller ─────────────────────────────────────────────────────
 
 echo "[5/6] 安装 PyInstaller..."
-pip install pyinstaller --quiet
-# 注册 app 包和 harness 子包到 Python 包索引（供 PyInstaller 追踪导入链）
-pip install -e . --no-deps --quiet
-pip install -e packages/harness --quiet
+# uv sync 已装好全部依赖，直接用 uv pip 装 PyInstaller
+# 不需要 -e .，PyInstaller 通过 --paths . 和 --hidden-import=app 即可追踪
+uv pip install pyinstaller --quiet
 echo "  ✓ PyInstaller 已安装"
 
 # ── 6. 编译 Gateway 二进制 ────────────────────────────────────────────────

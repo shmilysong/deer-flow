@@ -105,14 +105,11 @@ else
     cd "$REPO_ROOT/backend"
 
     echo "  安装后端依赖 (uv sync)..."
+    rm -rf .venv
     uv sync
 
     echo "  安装 PyInstaller 到项目 .venv..."
-    .venv/bin/pip install pyinstaller --quiet
-
-    echo "  注册 app 包和 harness 子包..."
-    .venv/bin/pip install -e . --no-deps --quiet
-    .venv/bin/pip install -e packages/harness --quiet
+    uv pip install pyinstaller --quiet
 
     echo "  编译 Gateway 二进制（耗时 5-15 分钟）..."
     .venv/bin/python -m PyInstaller --onedir --noconfirm \
