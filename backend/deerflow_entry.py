@@ -12,6 +12,26 @@ persistence) are imported here BEFORE create_app() is called.
 import os
 import sys
 
+# ── Suppress firecrawl.backup.py's print() noise in PyInstaller builds ──────
+# firecrawl/firecrawl.backup.py calls get_version() at import time, which
+# reads __init__.py as a plain file. After compilation the source is gone,
+# producing a harmless (but noisy) stderr warning.
+class _StderrFilter:
+    _SKIP = "Failed to get version from __init__.py"
+    def __init__(self):
+        self._orig = sys.stderr
+    def write(self, msg):
+        if self._SKIP not in msg:
+            self._orig.write(msg)
+    def flush(self):
+        self._orig.flush()
+    def isatty(self):
+        return self._orig.isatty()
+    def fileno(self):
+        return self._orig.fileno()
+
+sys.stderr = _StderrFilter()  # type: ignore[assignment]
+
 # ── Ensure the backend root is on sys.path ───────────────────────────────────
 _backend_root = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
 if _backend_root not in sys.path:
