@@ -27,24 +27,31 @@
 
 ```
 本机（x86_64）
-┌─────────────────────────────────────────────────┐
-│  DeerFlow（鹿）                                   │
-│    Lead Agent ──→ invoke_hermes 工具              │
-│                        │                         │
-│                        │ subprocess              │
-│                        ▼                         │
-│                   Hermes Agent（神）               │
-│                        │                         │
-│                  ┌─────┴─────┐                   │
-│                  ▼           ▼                   │
-│            ADS MCP    DeepRAG MCP                │
-│            (云桌面)     (知识库检索)                │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  DeerFlow（鹿）—— 主执行者 + 决策者               │
+│                                                  │
+│  Lead Agent → 是否涉及ADS/DeepRAG？               │
+│              ├─ ≤4步 → 直接用MCP工具              │
+│              ├─ ≥5步+有Skill → 用Skill执行+自评    │
+│              ├─ ≥5步+无Skill → invoke_hermes_create│
+│              └─ 自评<8分 → invoke_hermes_optimize  │
+│                                                  │
+│  工具层: ADS MCP  /  DeepRAG MCP  /  Sandbox ...  │
+│  审计层: audit.py → 每次执行记录审计表              │
+└──────────────────────┬───────────────────────────┘
+                       │ hermes run (子进程)
+                       ▼
+┌──────────────────────────────────────────────────┐
+│  Hermes Agent（神）—— 教练                        │
+│                                                  │
+│  创建模式: GEPA 完整执行 → 生成通用 SKILL.md       │
+│  优化模式: GEPA 再次执行 + 对比 → 生成 v2          │
+└──────────────────────────────────────────────────┘
 ```
 
 ### 1.2 一句话定位
 
-**Hermes Agent 作为 DeerFlow 的「技能生成引擎」**，安装在 DeerFlow 同一台机器上。DeerFlow 的 Lead Agent 在需要时通过 CLI 子进程调用她，她执行复杂任务后自动生成 Skill 并反哺给 DeerFlow。
+**DeerFlow 是主执行者，Hermes 是教练。** DeerFlow 用自己的 MCP 工具执行任务、记录审计、自评决策。Hermes 只在两个时机介入：创建新 Skill（`invoke_hermes_create`）和优化已有 Skill（`invoke_hermes_optimize`）。
 
 ### 1.3 前置条件
 
@@ -252,10 +259,8 @@ ls ~/.hermes/skills/
 |--------|--------|------|
 | `enabled` | `true` | 总开关 |
 | `hermes_path` | `/home/wing/.venvs/hermes/bin/hermes` | 上一节 `which hermes` 的输出 |
-| `auto_sync_skills` | `true` | 自动同步 Skill（建议打开） |
 | `sync_target` | `./skills/public/` | 同步到 DeerFlow 的公共 Skill 目录 |
 | `timeout` | `300` | 单任务超时 5 分钟 |
-| `min_calls` | `3` | 工具调用≥3次才生成 Skill |
 
 ### 6.3 重启 DeerFlow
 
@@ -287,47 +292,56 @@ docker logs deer-flow-langgraph --tail 50 | grep -i hermes
 - [ ] Hermes MCP 配置正确（`hermes tools list` 可看到 ADS/DeepRAG 工具）
 - [ ] DeerFlow 的 `extensions_config.json` 已配置 `communityTools.hermes_agent`
 - [ ] DeerFlow 日志显示 Hermes 工具已加载
-- [ ] 在 DeerFlow 中提问 "帮我查一下终端状态并搜索知识库，把过程学会"
+- [ ] 在 DeerFlow 中触发 ≥5 步的复杂任务，触发 Skill 创建
 
 ### 7.2 在 DeerFlow 中触发
 
-在 DeerFlow Web UI 或消息通道中提问：
+在 DeerFlow Web UI 或消息通道中提问（必须是 ≥5 步的复杂任务才能触发 Skill 创建）：
 
 ```
 帮我查一下ADS系统中有哪些终端在线，
 然后在DeepRAG知识库中搜索 "终端运维" 相关的文档，
-把这个过程学会生成一个Skill
+把结果整理成表格，
+生成一份巡检报告，
+发送到企业微信通知
 ```
 
+这是一个典型的 5 步任务（查状态 + 搜索 + 整理 + 生成报告 + 发通知），DeerFlow 会自动判断 ≥5 步且无匹配 Skill，进而调用 `invoke_hermes_create` 让 Hermes 创建通用 Skill。
+
 预期流程：
-1. DeerFlow Lead Agent 判断任务复杂 → 调用 `invoke_hermes` 工具
-2. Hermes 子进程执行任务 → 调用 ADS MCP + DeepRAG MCP
-3. Hermes GEPA 记录执行经验
-4. 若工具调用≥5次 → 自动生成 SKILL.md 到 `~/.hermes/skills/`
-5. `skill_sync.py` 检测到新 Skill → 同步到 `deer-flow/skills/public/`
-6. DeerFlow Lead Agent 返回结果，包含 "新 Skill 已同步" 信息
+1. DeerFlow Lead Agent 估算任务为 5 步 → 无匹配 Skill
+2. 调用 `invoke_hermes_create(task)` → Hermes 子进程完整执行
+3. Hermes GEPA 记录完整执行经验 → 自动生成 SKILL.md
+4. `skill_sync.py` 检测新 Skill → 通过通用性检查 → 同步到 `skills/public/`
+5. DeerFlow 返回结果，包含 "新 Skill 已同步" 信息
 
 ### 7.3 验证新 Skill
 
 ```bash
 # 查看 Hermes 生成的 Skill
 ls -la ~/.hermes/skills/
-cat ~/.hermes/skills/*/SKILL.md | head -20
+cat ~/.hermes/skills/*/SKILL.md | head -30
+
+# 确认 Skill 是通用版本（不包含具体终端编号）
+# ✅ 正确："查询指定终端的运行状态"
+# ❌ 错误："查询86号终端的运行状态"
 
 # 查看同步到 DeerFlow 的 Skill
 ls -la /home/wing/wing/emto/2026/2026.3/DeerFlow/deer-flow/skills/public/
-cat /home/wing/wing/emto/2026/2026.3/DeerFlow/deer-flow/skills/public/*/SKILL.md | head -20
+cat /home/wing/wing/emto/2026/2026.3/DeerFlow/deer-flow/skills/public/*/SKILL.md | head -30
 ```
 
-### 7.4 验证 Skill 可用
+### 7.4 验证 Skill 可用 + 自评优化
 
-在 DeerFlow 中再次提问，内容与之前相似但不完全相同：
+在 DeerFlow 中再次提问，内容与之前相似但不完全相同（换个终端编号）：
 
 ```
-查一下终端 86 号的状态，然后去知识库找相关的运维手册
+查一下终端100号的状态，搜巡检相关文档，做报告发企微通知
 ```
 
-如果 Lead Agent 直接使用了新同步的 Skill（而非再次调用 Hermes），说明闭环成功。
+如果 Lead Agent 直接使用了新同步的通用 Skill（而非再次调用 Hermes），说明闭环成功。
+
+DeerFlow 会用 Skill 执行后自动**4 维度自评**。如果该 Skill 使用 < 5 次且自评总分 < 8，会自动调用 `invoke_hermes_optimize` 让 Hermes 优化 Skill。这是一个良性循环——**越用越好用**。
 
 ---
 
@@ -373,7 +387,25 @@ cat ~/.hermes/skills/<skill-name>/SKILL.md
 rm -rf ~/.hermes/skills/<skill-name>/
 ```
 
-### 8.4 更新 Hermes
+### 8.4 查看 Skill 使用统计
+
+每次 DeerFlow 使用 Skill 执行任务后，会记录审计日志。可以查看哪些 Skill 用得最多、成功率如何：
+
+```bash
+# 查看审计目录结构
+ls -la ~/.hermes/audit/
+
+# 查看某个 Skill 的执行历史
+cat ~/.hermes/audit/<skill-name>.jsonl
+
+# 统计某个 Skill 的总执行次数
+wc -l ~/.hermes/audit/<skill-name>.jsonl
+
+# 查看最近 5 次执行记录
+tail -5 ~/.hermes/audit/<skill-name>.jsonl | python3 -m json.tool
+```
+
+### 8.5 更新 Hermes
 
 ```bash
 source ~/.venvs/hermes/bin/activate
@@ -382,7 +414,7 @@ pip install --upgrade hermes-agent
 
 更新后无需重启 DeerFlow，下此调用 `invoke_hermes` 时自动使用新版本。
 
-### 8.5 重启 Hermes
+### 8.6 重启 Hermes
 
 Hermes 没有常驻进程——她是每次被 `invoke_hermes` 调用时以子进程方式启动的。所以 **不需要「重启 Hermes」**。
 
@@ -486,14 +518,16 @@ Error: asyncio.exceptions.TimeoutError
 
 ### 10.4 Skill 未自动同步
 
-**原因**：工具调用次数不足 `min_calls`（默认 3 次）或 description 为空。
+**原因**：任务步骤不够复杂（<5 步）、或 SKILL.md 未通过通用性检查（包含具体编号）。
 
 **排查**：
 ```bash
+# 确认任务是否 ≥5 步（Step 数不足不会创建 Skill）
 # 检查 Hermes 端是否有 Skill
 ls -la ~/.hermes/skills/
 cat ~/.hermes/skills/*/SKILL.md | head -5
 # 确认 description 字段非空
+# 确认没有具体终端编号（如 "86号"）
 ```
 
 ### 10.5 DeerFlow 日志显示 Hermes 工具加载失败
@@ -523,9 +557,10 @@ Failed to load Hermes Agent tool: ...
 ---
 
 > **WING**
-> **初稿：2026-05-12**
+> **更新：2026-05-12**（基于圣上六道御旨的最终设计）
 >
 > 本文档对应实施计划：[hermes-skill-generator-plan.md](file:///home/wing/wing/emto/2026/2026.3/DeerFlow/.trae/documents/hermes-skill-generator-plan.md) 方案 A（CLI Wrapper）
 >
 > 关联文档：
 > - [HERMES_AGENT_INTEGRATION.md](../mcp/HERMES_AGENT_INTEGRATION.md) — 开发参考（给 AI 助手的）
+> - [hermes-skill-final-design.md](file:///home/wing/wing/emto/2026/2026.3/DeerFlow/.trae/documents/hermes-skill-final-design.md) — 最终设计文档
