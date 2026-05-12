@@ -233,8 +233,20 @@ release/
 `build-backend-on-server.sh` 会自动从源码编译安装 Python 3.12.9，耗时约 5-10 分钟。
 若服务器已安装 Python 3.12，会自动检测并跳过安装步骤。
 
-### Q: 服务器编译时 numpy 报错？
-已自动处理：脚本会检测旧 CPU 并降级 numpy 到 1.x 版本。
+### Q: 编译或启动时 numpy 报 CPU 指令集不兼容？
+```
+RuntimeError: NumPy was built with baseline optimizations:
+(X86_V2) but your machine doesn't support:
+(X86_V2).
+```
+
+**根因**：编译机和运行机的 CPU 架构不一致。NumPy 在安装时检测当前 CPU 启用高级指令集优化，PyInstaller 编译后无法在旧 CPU 上降级。
+
+**已修复（2026-05-12）**：`build-backend.sh` 和 `build-backend-on-server.sh` 均已内置 numpy 降级，编译时自动执行 `uv pip install "numpy<2"`，**无需手动降级**。
+
+如果仍然遇到，说明脚本不是最新版本，拉取最新脚本后直接编译即可。
+
+详细排查见 `OPERATIONS.md` → NumPy CPU 指令集不兼容。
 
 ### Q: 前端启动报 Module not found: @/...？
 检查 `release/frontend/` 是否包含 `tsconfig.json`、`postcss.config.js`、`components.json`、`styles/` 文件。这些是 Next.js 路径别名和样式所必需的。

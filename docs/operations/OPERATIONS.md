@@ -438,6 +438,65 @@ location / {
 
 ---
 
+## NumPy CPU 指令集不兼容（PyInstaller 编译部署）（2026-05-12 新增）
+
+### 问题：编译后的 Gateway 二进制在目标服务器启动失败
+
+**症状**：
+```
+RuntimeError: NumPy was built with baseline optimizations:
+(X86_V2) but your machine doesn't support:
+(X86_V2).
+
+ERROR:    Application startup failed. Exiting.
+```
+
+**涉及场景**：
+- 在本机（CPU 较新）执行 `bash build-backend.sh` 编译
+- 将编译产物 `dist/deerflow-gateway/` 传到目标服务器（CPU 较老）
+- 启动后 NumPy 检测到当前 CPU 不支持 x86-64-v2 指令集，直接崩溃
+
+**根因**：
+NumPy 在安装（或编译）时会自动检测当前 CPU 支持的指令集，启用最高级别的基线优化。较新的 CPU 支持 `x86-64-v2`（AVX、SSE4.2 等），而较老的服务器 CPU（如 Haswell 之前）不支持。PyInstaller 将 NumPy 的 `.so` 编译进二进制后，这个优化检测结果被锁定，无法在运行服务器上降级。
+
+**已修复**（2026-05-12）：
+`backend/build-backend.sh` 已在 `uv sync` 后自动执行 `uv pip install "numpy<2"` 降级 numpy。**直接用 `build-backend.sh` 编译即可，无需手动降级**。
+
+### 首次遇到此问题的修复流程
+
+如果仍然遇到此错误，说明二进制是旧版本编译的，重新编译即可：
+
+```bash
+cd /usr/xccloud/deerflow/source
+
+# 1. 如果之前手动降级过 numpy，重复执行保留（脚本会自动处理）
+# 2. 直接重新编译（build-backend.sh 已内置 numpy 降级）
+bash build-backend.sh
+
+# 3. 覆盖旧二进制
+cp -r dist/deerflow-gateway /usr/xccloud/deerflow/backend-bin/
+
+# 4. 重启
+cd /usr/xccloud/deerflow
+./scripts/deerflow.sh --stop
+./scripts/deerflow.sh
+```
+
+### 手动降级 numpy（仅当脚本未生效时备用）
+
+```bash
+cd /usr/xccloud/deerflow/source
+uv pip install "numpy<2" --force-reinstall
+bash build-backend.sh
+```
+
+**最佳实践**：
+- 后端编译尽量在目标服务器上执行（确保 CPU 架构一致）
+- `build-backend.sh` 已内置 numpy 降级，保持脚本为最新版本
+- 前后端分离：本机只编译前端，后端始终在服务器编译
+
+---
+
 ## 快速故障排查流程图
 
 ```
