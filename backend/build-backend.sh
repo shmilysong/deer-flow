@@ -38,6 +38,8 @@ echo "[1/4] 确保 Python 依赖已安装..."
 # 清理旧虚拟环境，确保每次编译从干净环境开始
 rm -rf .venv
 uv sync --quiet
+# 降级 numpy 到 1.x 以确保兼容老旧 CPU（避免 X86_V2 指令集不兼容）
+uv pip install "numpy<2" --quiet 2>&1
 echo "  ✓ uv sync 完成"
 
 # ── 安装 PyInstaller ───────────────────────────────────────────────────────
