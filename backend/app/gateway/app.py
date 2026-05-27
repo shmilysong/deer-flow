@@ -316,6 +316,23 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
         ],
     )
 
+    # —— Extension: ADS Auth (router only, no middleware) ——————————
+    # Registers the ADS login router. Does NOT add middleware —
+    # auth logic is inlined in AuthMiddleware itself.
+    import sys as _sys2
+    _ext_path2 = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    if _ext_path2 not in _sys2.path:
+        _sys2.path.insert(0, _ext_path2)
+    try:
+        from deerflow_extensions.ads_auth.startup import install_ads_auth
+
+        install_ads_auth(app=app)
+        logger.info("[ADSAuth] System installed successfully at startup")
+    except ImportError:
+        logger.warning("[ADSAuth] Package not found, ADS auth is disabled")
+    except Exception as _e2:
+        logger.warning(f"[ADSAuth] Install failed: {_e2}")
+
     # Auth: reject unauthenticated requests to non-public paths (fail-closed safety net)
     app.add_middleware(AuthMiddleware)
 

@@ -188,6 +188,12 @@ async def get_current_user_from_request(request: Request):
 
     Raises HTTPException 401 if not authenticated.
     """
+    # If AuthMiddleware already set request.state.user (e.g. via ADS auth),
+    # return it directly instead of re-validating with native JWT secret.
+    user_from_state = getattr(request.state, "user", None)
+    if user_from_state is not None:
+        return user_from_state
+
     from app.gateway.auth import decode_token
     from app.gateway.auth.errors import AuthErrorCode, AuthErrorResponse, TokenError, token_error_to_code
 

@@ -225,6 +225,32 @@ FastAPI application on port 8001 with health check at `GET /health`. Set `GATEWA
 
 Proxied through nginx: `/api/langgraph/*` → LangGraph, all other `/api/*` → Gateway.
 
+### ADS 统一认证扩展 (`deerflow_extensions/ads_auth/`)
+
+通过 `sitecustomize.py` 自启动注入，替换原有 DeerFlow 本地认证。
+
+| 文件 | 说明 |
+|------|------|
+| `ads_auth.py` | 代理调 ADS `/jwt/login`，返回 JWT |
+| `middleware.py` | `ADSProxyMiddleware` — 唯一认证关口，拦截旧端点返回 410 |
+| `router.py` | `POST /api/v1/auth/login/ads` 端点 |
+| `token_manager.py` | token 存储 + 写 MCP config.json |
+| `startup.py` | 通过 `app.add_middleware()` + `app.include_router()` 注入 |
+
+**认证流程**：
+1. 用户输 ADS 账号密码 → `POST /login/ads` → DeerFlow 转发 ADS `/jwt/login`
+2. ADS JWT 设为 `HttpOnly` Cookie（`ads_token`），写入 MCP config.json
+3. 后续请求 → `ADSProxyMiddleware` → 解码 JWT → 设置 `_ads_authenticated`
+4. `AuthMiddleware` (`auth_middleware.py`) 通过 1 行守卫（Extension Hook）跳过原有认证
+
+**核心改动**: `auth_middleware.py` `dispatch()` 中 1 行：
+```python
+if getattr(request.state, "_ads_authenticated", False):
+    return await call_next(request)
+```
+
+> ⚠️ **同步上游提醒**: 所有核心源码改动（含 data_collection 和 ads_auth）记录在 `docs/patches/ADS_AUTH_CORE_CHANGES.md`，`git pull` 后必须检查这些补丁是否被覆盖。
+
 ### Sandbox System (`packages/harness/deerflow/sandbox/`)
 
 **Interface**: Abstract `Sandbox` with `execute_command`, `read_file`, `write_file`, `list_dir`

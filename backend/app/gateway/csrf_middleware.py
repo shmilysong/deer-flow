@@ -48,6 +48,7 @@ def should_check_csrf(request: Request) -> bool:
 _AUTH_EXEMPT_PATHS: frozenset[str] = frozenset(
     {
         "/api/v1/auth/login/local",
+        "/api/v1/auth/login/ads",
         "/api/v1/auth/logout",
         "/api/v1/auth/register",
         "/api/v1/auth/initialize",
@@ -175,11 +176,13 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         _is_auth = is_auth_endpoint(request)
 
-        if should_check_csrf(request) and _is_auth and not is_allowed_auth_origin(request):
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "Cross-site auth request denied."},
-            )
+        if should_check_csrf(request) and _is_auth:
+            configured = _configured_cors_origins()
+            if configured and not is_allowed_auth_origin(request):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Cross-site auth request denied."},
+                )
 
         if should_check_csrf(request) and not _is_auth:
             cookie_token = request.cookies.get(CSRF_COOKIE_NAME)

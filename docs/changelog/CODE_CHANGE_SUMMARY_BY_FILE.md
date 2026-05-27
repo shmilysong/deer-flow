@@ -4,6 +4,99 @@
 
 ---
 
+### 32. ADS 认证迭代：零侵入优化 + 循环修复（⚠️ 已过时，被第 34 节取代）
+
+**动机**: 修复因 `/setup-status` 返回 410 导致的前端循环卡死问题，同时将核心源码改动降到最低。
+
+> **⚠️ 本节描述的是早期方案（ADSProxyMiddleware + scope 通信），已在后续迭代中全部重写。当前实际方案见第 34 节。**
+
+**SSR 兼容 — Cookie 双写** (`deerflow_extensions/ads_auth/router.py`):
+- 登录时同时设 `ads_token` + `access_token` 两个 HttpOnly Cookie
+- `access_token` 兼容原有 `server.ts` 的 `cookieStore.get("access_token")`
+
+**中间件双接受** (`deerflow_extensions/ads_auth/middleware.py`):
+- 第 49 行：`request.cookies.get("ads_token") or request.cookies.get("access_token")`
+- 两个 cookie 名都接受，原有 Newtork AuthMiddleware hook 不变
+
+**透明路由重写** (`frontend/extensions/ads_auth/middleware-handler.ts`):
+- 所有 `/login` 请求用 `NextResponse.rewrite()` 透明替换为 `/ads-login` 渲染
+- 地址栏 URL 不变，客户端 `router.push("/login")` 和 `window.location.href = "/login"` 无需修改
+- 未认证重定向目标改为 `/login`（由 middleware rewrite 兜底）
+
+**`/setup-status` 兼容** (`deerflow_extensions/ads_auth/middleware.py`):
+- 新增 `_REDIRECT_ENDPOINTS` 集合，`/setup-status` 返回 `200 {"needs_setup": false}` 而非 410
+- 避免 `login/page.tsx` 的 `useEffect` 因 410 触发 `.catch()` → `router.push("/login")` 导致循环
+
+**buildLoginUrl** (`frontend/src/core/auth/types.ts`):
+- 返回 `/ads-login?next=...` 而非 `/login?next=...`
+- 所有客户端 `router.push(buildLoginUrl(...))` 直接跳转到 `/ads-login`
+
+**核心源码改动**: **0 行新增**。所有逻辑均在扩展目录中实现。
+
+**移除**: `next.config.js` redirects() / `fetcher.ts` 守卫判断 — 这些补丁已恢复原样。
+
+### 33. ADS 主页替换：用 ADS 登录页替换着陆页
+
+**动机**: 用户打开 `http://localhost:2026/` 时看到营销着陆页，需额外点击才能进入登录流程。直接用 ADS 登录页替换主页。
+
+**方案**: `next.config.js` `beforeFiles` rewrites
+
+- `/` → rewrite 到 `/ads-login`
+- `/login` → rewrite 到 `/ads-login`
+- `/login/:path*` → rewrite 到 `/ads-login/:path*`
+
+`beforeFiles` 在 Next.js 路由层运行，优先级高于页面路由和 middleware，确保 `/` 和 `/login` 永远不会被原有页面组件处理。
+
+**暴力测试结果**:
+
+| 测试项 | 结果 |
+|--------|------|
+| 连续 20 次访问 `/` | 全部 200 ✅ |
+| 并发 10 个请求 `/` | 全部 200 ✅ |
+| 80 次 4 路径交替（循环检测） | 19111ms，无循环 ✅ |
+| `/login` 直接访问 | 200，内容为 ADS 登录页 ✅ |
+| `/ads-login` 直接访问 | 200 ✅ |
+| 后端回归（setup-status / login-local / me） | 200 / 410 / 401 ✅ |
+
+**改动文件**: `frontend/next.config.js` — 新增 `beforeFiles` rewrites + 保留原有 API proxy rewrites
+
+**核心源码改动**: 1 个文件（next.config.js，已在补丁记录中）
+
+### 34. ADS 认证修复：cookie + email + 中间件冲突 + User 构造
+
+**动机**: 登录后 `/auth/me` 返回 500 (`User.email` 必须是有效域名) 或 401 (`invalid_signature`)。ADSToken 用 ADS 服务器的 secret 签发，DeerFlow 原生 JWT 验证用 `AUTH_JWT_SECRET`，两者不兼容。
+
+**修复内容**:
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| User.email 无效 | `ads.local` 不是合法 TLD | 改用 `example.com` |
+| Cookie 不保存 | `secure=True` 阻止 HTTP 保存 | 改为 `secure=False` |
+| /auth/me 500 | Pydantic 验证 `id=username` 不是 UUID | 不传 `id`，让 `default_factory=uuid4` 自动生成 |
+| /auth/me 401 | 原生 JWT 验证用 `AUTH_JWT_SECRET` 检查 ADS token | 在 AuthMiddleware 内联 ADS JWT decode，直接提取 payload |
+| /auth/me 401 (下游route) | `get_current_user_from_request` 重新解码 cookie 用原生 secret | `deps.py` 先查 `request.state.user`（5行守卫） |
+| /auth/me 401 (cookie丢失) | ASGI 层 ADSProxyMiddleware 读取 `scope["headers"]` 后干扰 Starlette cookie 解析 | 移除 ADSProxyMiddleware，AuthMiddleware 直接读 `request.cookies` |
+| ADS_BASE_URL 没生效 | `serve.sh` source `.env`，但 `uv run` 不传递 shell 环境变量 | `config.py` 增加 `_load_dotenv()` 自动加载 `.env` |
+| Thread 404 | `User.id=uuid4()` 每次请求不同 → authz 拒绝访问 | 用 `uuid5("ads-{username}")` 确定性 UUID |
+| Cross-site auth 403 | 浏览器带 `Origin: http://localhost:2026` → backend 看到 `Host: localhost:8001`，CSRF 中间件判断跨域 | 改为"仅当 `GATEWAY_CORS_ORIGINS` 配置时才检查" |
+| 8001 端口僵尸进程 | `trae-sandbox` 多级 bwrap 进程 `--die-with-parent` | 手动清理后迁移到 8002 测试 |
+
+**核心源码改动**（9 个文件）:
+- `app.py` — ADS 路由注册块（try/except 包裹）
+- `auth_middleware.py` — 内联 JWT decode + 确定性 UUID（~28 行）
+- `csrf_middleware.py` — frozenset 加 `/login/ads`（1 行）
+- `deps.py` — `get_current_user_from_request` 先查 `request.state.user`（6 行守卫）
+- `docker-compose-dev.yaml` — 加 `ADS_BASE_URL` 环境变量
+- `next.config.js` — `rewrites()` 改为 `{beforeFiles, afterFiles, fallback}` 格式
+- `middleware.ts` — 从 1 行 re-export 改为 37 行内联
+- `types.ts` — `buildLoginUrl` 返回 `/ads-login` 替代 `/login`
+- `.env.example` — 新增 `GATEWAY_CORS_ORIGINS` + ADS 配置示例
+
+**扩展目录改动**（不侵入核心）:
+- `router.py` — cookie `secure=True → False`
+- `startup.py` — 不再注册 ADSProxyMiddleware
+- `config.py` — 增加 `.env` 自动加载
+
 ## 一、后端
 
 ### 1. `backend/CLAUDE.md`
@@ -1048,6 +1141,75 @@ export function MarkdownContent({
 
 - 项目目录结构中新增 `deerflow_extensions/` 说明。
 - 项目文档目录中新增数据采集体系文档引用。
+
+### 31. 新增 ADS 统一认证系统
+
+**动机**: 用 ADS 账号密码登录 DeerFlow，ADS JWT 作为唯一会话令牌，替换 DeerFlow 原生认证。
+
+**后端扩展目录** `deerflow_extensions/ads_auth/`:
+
+| 文件 | 说明 |
+|------|------|
+| `__init__.py` | 包标记 |
+| `config.py` | 从环境变量 `ADS_BASE_URL` 读取 ADS 地址 |
+| `ads_auth.py` | 调 ADS `/jwt/login` 拿 JWT |
+| `middleware.py` | ADSProxyMiddleware，唯一认证关口 |
+| `router.py` | `POST /login/ads` 端点 |
+| `token_manager.py` | token 存储 + 写 MCP config.json |
+| `startup.py` | 中间件安装逻辑（幂等，try/except 降级） |
+| `sitecustomize.py` | Python 自启动入口 |
+
+**前置扩展** `deerflow_extensions/sitecustomize.py`:
+- 合并加载 `data_collection` + `ads_auth` 两个扩展
+
+**前端扩展目录** `frontend/extensions/ads_auth/`:
+
+| 文件 | 说明 |
+|------|------|
+| `middleware-handler.ts` | Next.js 认证网关核心逻辑 |
+| `LoginPage.tsx` | ADS 登录页（FlickeringGrid 背景） |
+| `LoginLayout.tsx` | 简版布局 |
+
+**前端桥接文件（3 个，各 1 行 re-export）**:
+
+| 文件 | re-export |
+|------|-----------|
+| `frontend/middleware.ts` | `extensions/ads_auth/middleware-handler` |
+| `frontend/src/app/ads-login/page.tsx` | `extensions/ads_auth/LoginPage` |
+| `frontend/src/app/ads-login/layout.tsx` | `extensions/ads_auth/LoginLayout` |
+
+**核心改动（1 行）**:
+
+| 文件 | 行 | 说明 |
+|------|----|------|
+| `backend/app/gateway/auth_middleware.py` | +3 | `if getattr(request.state, "_ads_authenticated", False): return await call_next(request)` |
+
+**Docker 环境变量**:
+
+| 变量 | 默认值 | 位置 |
+|------|--------|------|
+| `ADS_BASE_URL` | `http://ads:8080` | `docker/docker-compose-dev.yaml` 两个服务 |
+| `ADS_MCP_CONFIG_PATH` | `""` | 同上 |
+
+**entrypoint.sh 改动**:
+
+| 文件 | 说明 |
+|------|------|
+| `deerflow_extensions/entrypoint.sh` | sitecustomize 符号链接改为指向 `deerflow_extensions/sitecustomize.py`（合并加载器） |
+
+**测试文件**:
+
+| 文件 | 说明 |
+|------|------|
+| `backend/tests/test_ads_auth_violent.py` | 5 个暴力测试项目：连续100次、并发50、服务器不可用、过期、恶意token |
+
+**总变更统计**:
+
+| 项目 | 数量 |
+|------|------|
+| 新增文件 | 15（后端8 + 前端7） |
+| 修改文件 | 3（auth_middleware.py + docker-compose-dev.yaml + entrypoint.sh） |
+| 零侵入验证 | ✅ 删除 `auth_middleware.py` 3行 + `docker-compose-dev.yaml` 4行 + `entrypoint.sh` 1行即可完全卸载 |
 
 ---
 

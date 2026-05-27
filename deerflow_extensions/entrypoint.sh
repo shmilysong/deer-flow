@@ -13,7 +13,7 @@ fi
 
 # Create sitecustomize.py for auto-injection (if not exists)
 if [ ! -e /app/backend/.venv/lib/python3.12/site-packages/sitecustomize.py ]; then
-    ln -s /app/deerflow_extensions/data_collection/sitecustomize.py /app/backend/.venv/lib/python3.12/site-packages/sitecustomize.py
+    ln -s /app/deerflow_extensions/sitecustomize.py /app/backend/.venv/lib/python3.12/site-packages/sitecustomize.py
 fi
 
 # Start LangGraph

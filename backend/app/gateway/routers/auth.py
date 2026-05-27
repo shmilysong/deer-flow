@@ -326,6 +326,7 @@ async def register(request: Request, response: Response, body: RegisterRequest):
 async def logout(request: Request, response: Response):
     """Logout current user by clearing the cookie."""
     response.delete_cookie(key="access_token", secure=is_secure_request(request), samesite="lax")
+    response.delete_cookie(key="ads_token", secure=is_secure_request(request), samesite="lax")
     return MessageResponse(message="Successfully logged out")
 
 

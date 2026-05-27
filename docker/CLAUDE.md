@@ -28,6 +28,10 @@ DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json
 DEER_FLOW_ROOT=/c/Users/wing/Documents/Wing/emto/2026/2026.3/DeerFlow/deer-flow
 DEER_FLOW_REPO_ROOT=/c/Users/wing/Documents/Wing/emto/2026/2026.3/DeerFlow/deer-flow
 HOME=/c/Users/wing
+
+# ADS 统一认证
+ADS_BASE_URL=http://ads:8080
+ADS_MCP_CONFIG_PATH=/home/wing/.hermes/mcp-servers/ads-mcp/.ads-mcp/config.json
 ```
 
 **Why /c/ path format?** Docker Desktop on Windows uses MSYS2 paths. Always use `/c/Users/...` instead of `C:\Users\...` or `C:/Users/...`.

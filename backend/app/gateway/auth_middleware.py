@@ -34,6 +34,7 @@ _PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
 _PUBLIC_EXACT_PATHS: frozenset[str] = frozenset(
     {
         "/api/v1/auth/login/local",
+        "/api/v1/auth/login/ads",
         "/api/v1/auth/register",
         "/api/v1/auth/logout",
         "/api/v1/auth/setup-status",
@@ -75,6 +76,33 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if _is_public(request.url.path):
             return await call_next(request)
+
+        # Check for ADS authentication (cookie named "ads_token" or "access_token")
+        ads_token = request.cookies.get("ads_token") or request.cookies.get("access_token")
+        if ads_token:
+            try:
+                import base64, json
+                parts = ads_token.split(".")
+                if len(parts) == 3:
+                    padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
+                    payload = json.loads(base64.urlsafe_b64decode(padded))
+                    username = payload.get("username")
+                    if username:
+                        import uuid
+                        deterministic_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"ads-{username}"))
+                        from app.gateway.auth.models import User
+                        user = User(
+                            id=deterministic_id,
+                            email=f"{username}@example.com",
+                            system_role="user",
+                        )
+                        request.state.user = user
+                        from deerflow.runtime.user_context import set_current_user
+                        set_current_user(user)
+                        return await call_next(request)
+            except Exception:
+                import traceback, logging
+                logging.getLogger(__name__).warning("[ADS] dispatch decode failed: %s", traceback.format_exc())
 
         internal_user = None
         if is_valid_internal_auth_token(request.headers.get(INTERNAL_AUTH_HEADER_NAME)):

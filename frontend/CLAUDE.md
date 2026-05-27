@@ -38,7 +38,7 @@ The frontend is a stateful chat application. Users create **threads** (conversat
 
 ### Source Layout (`src/`)
 
-- **`app/`** — Next.js App Router. Routes: `/` (landing), `/workspace/chats/[thread_id]` (chat).
+- **`app/`** — Next.js App Router. Routes: `/` (landing, 被 `next.config.js` beforeFiles rewrite 到 `/ads-login`), `/workspace/chats/[thread_id]` (chat), `/ads-login` (ADS 认证登录页，扩展目录桥接).
 - **`components/`** — React components split into:
   - `ui/` — Shadcn UI primitives (auto-generated, ESLint-ignored)
   - `ai-elements/` — Vercel AI SDK elements (auto-generated, ESLint-ignored)

@@ -163,6 +163,8 @@ services:
       - DEER_FLOW_HOST_SKILLS_PATH=${DEER_FLOW_ROOT}/skills
       - DEER_FLOW_SANDBOX_HOST=host.docker.internal
       - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json
+      - ADS_BASE_URL=${ADS_BASE_URL:-http://ads:8080}
+      - ADS_MCP_CONFIG_PATH=${ADS_MCP_CONFIG_PATH:-}
     env_file:
       - ../.env
     extra_hosts:
