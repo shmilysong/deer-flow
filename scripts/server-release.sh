@@ -19,6 +19,11 @@
 #   3. frontend/ 目录为 Next.js standalone 构建产物
 #
 # 注意：.env 中的值不要加反引号 `...`，否则 shell 会将其当作命令执行
+#
+# 目录结构说明：
+#   backend-bin/ 是 dist/deerflow-gateway/ 的整体复制
+#   即 backend-bin/deerflow-gateway/ 目录（内含二进制 + _internal/）
+#   路径写法为 ./backend-bin/deerflow-gateway/deerflow-gateway
 
 set -e
 
@@ -82,7 +87,7 @@ echo ""
 echo "启动 Gateway (端口 8001)..."
 DEER_FLOW_CONFIG_PATH="$(pwd)/config.yaml"
 env DEER_FLOW_CONFIG_PATH="$DEER_FLOW_CONFIG_PATH" \
-    ./backend-bin/deerflow-gateway \
+    ./backend-bin/deerflow-gateway/deerflow-gateway \
     > logs/gateway.log 2>&1 &
 
 "$SCRIPTS_DIR/wait-for-port.sh" 8001 30 "Gateway" || {
