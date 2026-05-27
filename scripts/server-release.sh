@@ -9,6 +9,16 @@
 # 说明：
 #   启动后同时运行后端（Gateway 二进制）和前端（Next.js）。
 #   日志输出到 release/logs/ 目录下。
+#
+# 前置要求：
+#   1. 在 release/ 目录下创建 .env 文件，至少配置以下变量：
+#      - ADS_BASE_URL=https://your-ads-server   # ADS 认证服务器地址（必填）
+#      - DEEPSEEK_API_KEY=xxx                    # 或其他模型 API Key
+#      - ADS_MCP_CONFIG_PATH=path/to/config.json # ADS MCP 配置路径（可选）
+#   2. backend-bin/deerflow-gateway 二进制文件（ELF 可执行文件）
+#   3. frontend/ 目录为 Next.js standalone 构建产物
+#
+# 注意：.env 中的值不要加反引号 `...`，否则 shell 会将其当作命令执行
 
 set -e
 
@@ -72,7 +82,7 @@ echo ""
 echo "启动 Gateway (端口 8001)..."
 DEER_FLOW_CONFIG_PATH="$(pwd)/config.yaml"
 env DEER_FLOW_CONFIG_PATH="$DEER_FLOW_CONFIG_PATH" \
-    ./backend-bin/deerflow-gateway/deerflow-gateway \
+    ./backend-bin/deerflow-gateway \
     > logs/gateway.log 2>&1 &
 
 "$SCRIPTS_DIR/wait-for-port.sh" 8001 30 "Gateway" || {

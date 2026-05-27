@@ -332,8 +332,8 @@ echo "[9/10] ADS MCP..."
 ADS_MCP_DIR="${REPO_ROOT}/ads-agent-mcp"
 if [ -d "$ADS_MCP_DIR" ]; then
     echo "  检测到 ADS MCP..."
-    if [ ! -d "$ADS_MCP_DIR/dist" ] || [ ! -d "$ADS_MCP_DIR/node_modules" ]; then
-        echo "  ⚠️  ADS MCP 未构建（缺少 dist/ 或 node_modules/）"
+    if [ ! -d "$ADS_MCP_DIR/dist" ]; then
+        echo "  ⚠️  ADS MCP 未构建（缺少 dist/）"
         echo "  ⚠️  请先执行：cd $ADS_MCP_DIR && npm install && npm run build"
         echo "  ⚠️  跳过 ADS MCP..."
     else
