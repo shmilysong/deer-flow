@@ -2,6 +2,24 @@
 #
 # build-backend-on-server.sh — 在目标服务器上编译 PyInstaller 二进制
 #
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  关键注意事项（每次编译前必读）                              ║
+# ║                                                              ║
+# ║  1. deerflow_entry.py 必须 import 模块级 app，避免 ❌        ║
+# ║     双重 create_app()：                                       ║
+# ║       from app.gateway.app import app   ← ✅ 正确           ║
+# ║       from app.gateway.app import create_app; app=create_app() ← ❌ 会导致   ║
+# ║      ADS 路由注册到错误实例 → 404                            ║
+# ║                                                              ║
+# ║  2. cp 命令必须用整个目录复制，不加 /*                      ║
+# ║       cp -r dist/deerflow-gateway /usr/xccloud/deerflow/backend-bin/  ← ✅  ║
+# ║       cp -r dist/deerflow-gateway/* ... ← ❌ 摊平结构，丢失路径            ║
+# ║                                                              ║
+# ║  3. server-release.sh 中路径为:                              ║
+# ║       ./backend-bin/deerflow-gateway/deerflow-gateway        ║
+# ║     目录结构必须为 backend-bin/deerflow-gateway/(二进制+_internal/)         ║
+# ╚══════════════════════════════════════════════════════════════╝
+#
 # 用法：
 #   1. 在本机构建 release (跳过 PyInstaller 步骤):
 #      ./scripts/build-release.sh --skip-backend
@@ -19,7 +37,8 @@
 #      cd /usr/xccloud/deerflow/source && bash backend/scripts/build-backend-on-server.sh
 #
 #   5. 手动复制产物到 release 目录:
-#      cp -r backend/dist/deerflow-gateway /usr/xccloud/deerflow/backend-bin/
+#      rm -rf /usr/xccloud/deerflow/backend-bin
+#      cp -r dist/deerflow-gateway /usr/xccloud/deerflow/backend-bin/
 #
 
 set -e
@@ -139,11 +158,7 @@ echo "[6/6] 编译 Gateway 二进制（耗时 5-15 分钟）..."
 
 # deerflow_extensions 可选，目录不存在就跳过
 ADD_DATA=""
-if [ -d "../deerflow_extensions" ]; then
-    ADD_DATA="--add-data ../deerflow_extensions:deerflow_extensions"
-elif [ -d "../../deerflow_extensions" ]; then
-    ADD_DATA="--add-data ../../deerflow_extensions:deerflow_extensions"
-elif [ -d "./deerflow_extensions" ]; then
+if [ -d "./deerflow_extensions" ]; then
     ADD_DATA="--add-data ./deerflow_extensions:deerflow_extensions"
 else
     echo "  ⚠️  未找到 deerflow_extensions，跳过附加数据目录"
@@ -315,6 +330,7 @@ echo ""
 echo "  验证: ldd dist/deerflow-gateway/_internal/libpython3.12.so.1.0 | grep 'not found'"
 echo ""
 echo "  ✓ 手动复制到 release 目录:"
+echo "    rm -rf /usr/xccloud/deerflow/backend-bin"
 echo "    cp -r dist/deerflow-gateway /usr/xccloud/deerflow/backend-bin/"
 echo ""
 

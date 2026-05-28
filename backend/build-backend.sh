@@ -55,7 +55,7 @@ echo "[3/4] 编译 Gateway 二进制（耗时约 5-15 分钟）..."
     --name deerflow-gateway \
     --paths . \
     --paths packages/harness \
-    --add-data "./deerflow_extensions:deerflow_extensions" \
+    --add-data "../deerflow_extensions:deerflow_extensions" \
     \
     --hidden-import=app \
     --hidden-import=app.gateway \

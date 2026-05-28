@@ -17,5 +17,6 @@ def install_ads_auth(app=None):
         app.include_router(ads_router, prefix="/api/v1/auth")
 
         _installed = True
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging
+        logging.getLogger(__name__).warning("[ADS] install failed: %s", _e)

@@ -79,6 +79,8 @@
 | ADS_BASE_URL 没生效 | `serve.sh` source `.env`，但 `uv run` 不传递 shell 环境变量 | `config.py` 增加 `_load_dotenv()` 自动加载 `.env` |
 | Thread 404 | `User.id=uuid4()` 每次请求不同 → authz 拒绝访问 | 用 `uuid5("ads-{username}")` 确定性 UUID |
 | Cross-site auth 403 | 浏览器带 `Origin: http://localhost:2026` → backend 看到 `Host: localhost:8001`，CSRF 中间件判断跨域 | 改为"仅当 `GATEWAY_CORS_ORIGINS` 配置时才检查" |
+| Thread 404 (部署) | `deerflow_entry.py` 双重 `create_app()` → ADS 路由注册到错误实例 | 改为直接 `from app.gateway.app import app` |
+| cp 摊平结构 (部署) | `cp -r src/* dst/` 丢失目录层级，`server-release.sh` 路径不匹配 | 用 `cp -r src/dir dst/` 整体复制 |
 | 8001 端口僵尸进程 | `trae-sandbox` 多级 bwrap 进程 `--die-with-parent` | 手动清理后迁移到 8002 测试 |
 
 **核心源码改动**（9 个文件）:

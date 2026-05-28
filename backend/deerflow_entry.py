@@ -154,9 +154,7 @@ import deerflow.persistence.user.model
 # 11. Bootstrap Gateway
 # =============================================================================
 import uvicorn
-from app.gateway.app import create_app
-
-app = create_app()
+from app.gateway.app import app
 
 if __name__ == "__main__":
     host = os.environ.get("DEERFLOW_HOST", "0.0.0.0")
