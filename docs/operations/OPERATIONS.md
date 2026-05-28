@@ -87,19 +87,19 @@ Volumes         12        4         3.649GB   1.88GB (51%)
 - Dockerfile 未设置 `NODE_OPTIONS` 内存上限
 - Node.js 默认允许无限制的堆内存增长
 
-**已修复**：
+**已修复（2026-04-21 更新）**：
 
-1. `docker-compose.yaml` - 添加内存限制：
+1. `docker-compose-dev.yaml` - 添加内存限制（2GB，生产模式 next start）：
 ```yaml
 services:
   frontend:
-    mem_limit: 512m
-    memswap_limit: 512m
+    mem_limit: 2g
+    memswap_limit: 2g
 ```
 
 2. `Dockerfile` - 添加 Node.js 内存上限：
 ```dockerfile
-ENV NODE_OPTIONS="--max-old-space-size=384"
+ENV NODE_OPTIONS="--max-old-space-size=768"
 ```
 
 3. `next.config.js` - 禁用 source maps：
@@ -120,9 +120,17 @@ const queryClient = new QueryClient({
 });
 ```
 
+**注意**：Next.js 16.1.7 dev server + Turbopack SSR 会挂死，使用 `target: prod` + `pnpm start` 代替。
+
 **修复结果**：
 ```
-MEM USAGE / LIMIT: 89.38MiB / 512MiB   17.46%
+MEM USAGE / LIMIT: 89.38MiB / 2GiB   4.4%
+```
+
+验证命令：
+```bash
+docker inspect deer-flow-frontend --format '{{.HostConfig.Memory}}'
+# 应显示：2147483648（2GB 字节数）
 ```
 
 ---
@@ -202,6 +210,30 @@ deer-flow/
 1. **不要将 .env 提交到 git** - 包含密钥
 2. **路径必须是绝对 Windows 路径** - Docker Compose 会解析
 3. **反斜杠或正斜杠都可以** - Windows 上两者都有效
+
+### 常见 .env 配置陷阱
+
+**问题**：Gateway 或 LangGraph 无法找到配置文件，启动时报 `IsADirectoryError: [Errno 21] Is a directory: '/app/backend/config.yaml'`
+
+**根因**：`docker/.env` 中的 `DEER_FLOW_EXTENSIONS_CONFIG_PATH` 等变量是 Windows 主机路径，在容器内不存在。`resolve_config_path()` 抛异常后被 `except Exception` 捕获，fallback 失败导致 Errno 30。
+
+**解决**：在 `docker-compose-dev.yaml` 的 `environment` 中显式设置容器内路径，**覆盖** `.env` 中的 Windows 路径：
+
+```yaml
+gateway:
+  environment:
+    - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json
+  env_file:
+    - ../.env
+
+langgraph:
+  environment:
+    - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json
+  env_file:
+    - ../.env
+```
+
+**关键**：`environment` 中的变量会覆盖 `env_file` 中的同名变量。设置为容器内路径 `/app/extensions_config.json`（已通过 volume 挂载为可读写）。
 
 ---
 
@@ -494,6 +526,46 @@ bash build-backend.sh
 - 后端编译尽量在目标服务器上执行（确保 CPU 架构一致）
 - `build-backend.sh` 已内置 numpy 降级，保持脚本为最新版本
 - 前后端分离：本机只编译前端，后端始终在服务器编译
+
+---
+
+## ADS MCP 故障排查
+
+### 问题：DeerFlow 无法识别 ADS MCP
+
+**症状**：LangGraph 日志中没有 `Configured MCP server: ads`。
+
+**根因**：ADS MCP 源码目录缺少 `dist/` 和 `node_modules/`（未执行 `npm run build`），容器挂载的是空目录。
+
+**排查**：
+```bash
+ls "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp/dist/"
+ls "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp/node_modules/"
+```
+
+**解决**：
+```bash
+cd "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp"
+npm install && npm run build
+docker compose -f docker-compose-dev.yaml down && docker compose -f docker-compose-dev.yaml up -d
+```
+
+### 问题：切换 ADS MCP 开关时报 Errno 30
+
+**症状**：Web UI 中切换 ADS MCP 开关时返回 `Failed to update MCP configuration: [Errno 30] Read-only file system: '/app/backend/extensions_config.json'`
+
+**根因**：`docker/.env` 中的路径是 Windows 主机路径，在容器内不存在。另外，ADS MCP 目录可能挂载为 `:ro`（只读）。
+
+**解决**：将 `docker-compose-dev.yaml` 中 ADS MCP 目录挂载改为可读写：
+```yaml
+# 之前（只读）
+# - /home/wing/wing/git/ds2server/ds2server/ads-agent/mcp:/app/ads-mcp:ro
+
+# 现在（可读写）
+- /home/wing/wing/git/ds2server/ds2server/ads-agent/mcp:/app/ads-mcp
+```
+
+同时确保 `docker-compose-dev.yaml` 中 `DEER_FLOW_EXTENSIONS_CONFIG_PATH` 设置为容器内路径（见上文 .env 配置陷阱）。
 
 ---
 

@@ -190,116 +190,25 @@ pnpm check   # Lint + 类型检查
 
 ## Docker/WSL 运维与故障排查
 
-### WSL 内存增长 → 黑屏
+运维与故障排查内容已落地到独立文档，以下仅列摘要和引用：
 
-**症状**：`vmmemws`（WSL2）占用大量内存，系统变得无响应或黑屏。
+| 主题 | 文档 |
+|------|------|
+| WSL 内存管理 / Frontend 内存问题 / 502 Gateway / .env 配置 / ADS MCP 故障 | `@./docs/operations/OPERATIONS.md` |
+| ADS MCP 两层配置 & 整合细则 | `@./docs/mcp/ADS-MCP对接DeerFlow整合指南-实测版.md` |
+| 编译部署 & NumPy 兼容性 | `@./docs/operations/BUILD_AND_DEPLOY.md` |
+| 部署已知问题 | `@./docs/operations/DEPLOYMENT_KNOWN_ISSUES.md` |
 
-**根因**：
-- 反复执行 `docker compose up --build` 会累积旧镜像和构建缓存
-- 构建缓存可增长至 **65GB+**
-- WSL2 不会自动将内存释放给 Windows
-
-**预防**：
+**快速验证命令**：
 ```bash
-# 每周：轻量清理（删除停止的容器、未使用的网络、缓存）
-docker system prune -f
-
-# 每月：深度清理（删除所有未使用的镜像、容器、卷、缓存）
-docker system prune -a --volumes -f
-
-# 可选：通过 C:\Users\wing\.wslconfig 设置 WSL2 内存限制：
-# [wsl2]
-# memory=4GB
-# processors=4
-# swap=2GB
-```
-
-### Frontend 容器内存：2.9GB（正常：200-500MB）
-
-**根因**：`docker-compose.yaml` 未设置 `mem_limit`，Dockerfile 未设置 `NODE_OPTIONS` 内存限制。
-
-**已修复（2026-04-21 更新）**：
-- `docker-compose-dev.yaml`：`mem_limit: 2g`（2GB，生产模式 next start）
-- `Dockerfile`：`ENV NODE_OPTIONS="--max-old-space-size=768"`
-- **注意**：Next.js 16.1.7 dev server + Turbopack SSR 会挂死，使用 `target: prod` + `pnpm start` 代替
-
-验证命令：
-```bash
+# 检查容器内存限制
 docker inspect deer-flow-frontend --format '{{.HostConfig.Memory}}'
 # 应显示：2147483648（2GB 字节数）
-```
 
-### 502 Bad Gateway / IsADirectoryError
-
-**症状**：Gateway 或 LangGraph 启动失败：
-```
-IsADirectoryError: [Errno 21] Is a directory: '/app/backend/config.yaml'
-RuntimeError: Failed to load configuration during gateway startup
-```
-
-**根因**：`docker/.env` 中的路径配置错误。`DEER_FLOW_CONFIG_PATH` 等环境变量必须是**主机路径**（Windows 路径），而不是容器内路径。Docker 会将主机路径当作文件挂载，如果路径不存在则创建同名**目录**。
-
-**正确的 .env 配置**（docker/.env）：
-```env
-HOME=C:\Users\wing
-BETTER_AUTH_SECRET=<你的密钥>
-DEER_FLOW_CONFIG_PATH=C:\path\to\deer-flow\config.yaml
-DEER_FLOW_EXTENSIONS_CONFIG_PATH=C:\path\to\deer-flow\extensions_config.json
-DEER_FLOW_HOME=C:\path\to\deer-flow
-DEER_FLOW_REPO_ROOT=C:\path\to\deer-flow
-DEER_FLOW_DOCKER_SOCKET=/var/run/docker.sock
-PORT=2026
-```
-
-**注意**：Docker Compose 会自动将这些主机路径映射到 docker-compose.yaml volumes 中定义的容器内路径。
-
-### ADS MCP 识别不到 + Errno 30
-
-**症状 1**：DeerFlow 无法识别 ADS MCP，LangGraph 日志中没有 `Configured MCP server: ads`。
-
-**根因**：ADS MCP 源码目录缺少 `dist/` 和 `node_modules/`（未执行 `npm run build`），容器挂载的是空目录。
-
-**排查**：
-```bash
+# 检查 ADS MCP 构建状态
 ls "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp/dist/"
 ls "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp/node_modules/"
 ```
-
-**解决**：
-```bash
-cd "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp"
-npm install && npm run build
-docker compose -f docker-compose-dev.yaml down && docker compose -f docker-compose-dev.yaml up -d
-```
-
----
-
-**症状 2**：在 DeerFlow Web UI 中切换 ADS MCP 开关时报错：
-```
-Failed to update MCP configuration: [Errno 30] Read-only file system: '/app/backend/extensions_config.json'
-```
-
-**根因**：`docker/.env` 中的 `DEER_FLOW_EXTENSIONS_CONFIG_PATH=C:\Users\wing\...` 是 Windows 主机路径，在容器内不存在。`resolve_config_path()` 抛异常后被 `except Exception` 捕获，代码 fallback 失败导致 `Errno 30`。
-
-**解决**：在 `docker-compose-dev.yaml` 的 `environment` 中显式设置容器内路径，**覆盖** `.env` 中的 Windows 路径：
-
-```yaml
-gateway:
-  environment:
-    - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json  # 覆盖 .env
-  env_file:
-    - ../.env
-
-langgraph:
-  environment:
-    - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json  # 覆盖 .env
-  env_file:
-    - ../.env
-```
-
-**关键**：`environment` 中的变量会覆盖 `env_file` 中的同名变量。设置为容器内路径 `/app/extensions_config.json`（已通过 volume 挂载为可读写）。
-
-**重要更新（2026-04-21）**：ADS MCP 有两层配置文件，详见 `@./docs/mcp/ADS-MCP对接DeerFlow整合指南-实测版.md`
 
 ## 故障排查清单
 
