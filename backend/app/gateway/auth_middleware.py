@@ -97,7 +97,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                             system_role="user",
                         )
                         request.state.user = user
-                        from deerflow.runtime.user_context import set_current_user
                         set_current_user(user)
                         return await call_next(request)
             except Exception:
