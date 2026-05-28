@@ -87,7 +87,7 @@ echo ""
 echo "启动 Gateway (端口 8001)..."
 DEER_FLOW_CONFIG_PATH="$(pwd)/config.yaml"
 env DEER_FLOW_CONFIG_PATH="$DEER_FLOW_CONFIG_PATH" \
-    ./backend-bin/deerflow-gateway/deerflow-gateway \
+    ./backend-bin/deerflow-gateway \
     > logs/gateway.log 2>&1 &
 
 "$SCRIPTS_DIR/wait-for-port.sh" 8001 30 "Gateway" || {

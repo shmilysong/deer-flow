@@ -88,15 +88,67 @@ fi
 if [ -z "$PYTHON" ]; then
     echo "[1/6] ✗ 未找到 Python 3.12，正在从源码编译安装..."
     echo "  安装编译依赖..."
+
+    _install_missing_pkgs() {
+        local pkg_manager="$1"
+        shift
+        local missing=()
+        for pkg in "$@"; do
+            rpm -q "$pkg" &>/dev/null || missing+=("$pkg")
+        done
+        if [ ${#missing[@]} -gt 0 ]; then
+            "$pkg_manager" install -y "${missing[@]}"
+        else
+            echo "    所有依赖包已安装，跳过"
+        fi
+    }
+
     if command -v dnf &>/dev/null; then
-        dnf install -y --disablerepo=docker-ce-stable \
+        _install_missing_pkgs dnf \
             gcc gcc-c++ make openssl-devel bzip2-devel libffi-devel \
-            zlib-devel readline-devel sqlite-devel wget
+            zlib-devel readline-devel sqlite-devel wget \
+            kernel-devel glibc-devel glibc-headers
     elif command -v yum &>/dev/null; then
-        yum install -y --disablerepo=docker-ce-stable \
+        _install_missing_pkgs yum \
             gcc gcc-c++ make openssl-devel bzip2-devel libffi-devel \
-            zlib-devel readline-devel sqlite-devel wget
+            zlib-devel readline-devel sqlite-devel wget \
+            kernel-devel glibc-devel glibc-headers
     fi
+
+    # 验证 C 编译器和预处理器均正常（防止包管理器降级导致损坏）
+    echo "  验证 C 编译器..."
+    if ! echo 'int main(){return 0;}' | gcc -x c - -o /tmp/.gcc-test 2>/dev/null; then
+        echo "  ✗ gcc 不可用！尝试修复..."
+        if command -v dnf &>/dev/null; then
+            dnf reinstall -y gcc gcc-c++ cpp glibc-devel
+        elif command -v yum &>/dev/null; then
+            yum reinstall -y gcc gcc-c++ cpp glibc-devel
+        fi
+        if ! echo 'int main(){return 0;}' | gcc -x c - -o /tmp/.gcc-test 2>/dev/null; then
+            echo "  ✗ gcc 仍然不可用，请手动修复后重试"
+            exit 1
+        fi
+    fi
+    rm -f /tmp/.gcc-test
+    echo "  ✓ gcc 正常"
+
+    echo "  验证 C 预处理器 (/lib/cpp)..."
+    echo '#include <limits.h>' > /tmp/.test-cpp.c
+    if ! /lib/cpp /tmp/.test-cpp.c >/dev/null 2>/dev/null; then
+        echo "  ✗ /lib/cpp 不可用！尝试修复..."
+        if command -v dnf &>/dev/null; then
+            dnf reinstall -y cpp glibc-devel kernel-devel
+        elif command -v yum &>/dev/null; then
+            yum reinstall -y cpp glibc-devel kernel-devel
+        fi
+        if ! /lib/cpp /tmp/.test-cpp.c >/dev/null 2>/dev/null; then
+            echo "  ✗ /lib/cpp 仍然不可用，请手动修复后重试"
+            rm -f /tmp/.test-cpp.c
+            exit 1
+        fi
+    fi
+    rm -f /tmp/.test-cpp.c
+    echo "  ✓ /lib/cpp 正常"
 
     cd /tmp
     wget -q https://www.python.org/ftp/python/3.12.9/Python-3.12.9.tgz
