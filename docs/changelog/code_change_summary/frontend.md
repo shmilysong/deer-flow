@@ -35,6 +35,16 @@
 
 ---
 
+### 8. `frontend/src/components/workspace/settings/account-settings-page.tsx` — ADS 账号适配
+
+**原因**: ADS 统一认证登录后，user.email 固定为 "admin@example.com"、system_role 为 "user"（占位值），原生修改密码 API 不可用。隐藏不正确的字段和不可用的功能。
+
+**改动**:
+1. 隐藏 email/role 显示区（注释保留），改为只显示从 email 前缀提取的账号名
+2. 隐藏"修改密码"表单（注释保留），因为 ADS 密码由统一认证管理
+
+---
+
 ### 7. `frontend/README.md`
 
 ```diff

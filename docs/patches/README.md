@@ -12,7 +12,7 @@
 |------|---------|------|------|
 | **data_collection**（蒸馏数据采集） | `app.py` + `docker-compose*.yaml` + `entrypoint.sh` + `sitecustomize.py` | ✅ 低 | 4 个核心 + 1 个扩展 |
 | **ads_auth**（ADS 统一认证） | `app.py` + `auth_middleware.py` + `csrf_middleware.py` + `deps.py` + `docker-compose-dev.yaml` + `next.config.js` + `middleware.ts` + `types.ts` + `.env.example` | ✅ 低 | 9 个核心 |
-| **settings-dialog-ext**（SettingsDialog 扩展架构） | `settings-dialog.tsx` + `registry.ts` + `workspace-nav-menu.tsx` + `app.py` | ✅ 低 | 3 个前端 + 1 个后端 |
+| **settings-dialog-ext**（SettingsDialog 扩展架构 + ADS 账号适配） | `settings-dialog.tsx` + `registry.ts` + `workspace-nav-menu.tsx` + `app.py` + `account-settings-page.tsx` | ✅ 低 | 4 个前端 + 1 个后端 |
 
 两条原则：
 1. 所有注入代码都是 `try/except ImportError` 包起来的——即使扩展不可用，DeerFlow 正常运行
@@ -25,7 +25,7 @@
 | 模块 | 文件 | 包含补丁 | 说明 |
 |------|------|---------|------|
 | **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py` |
-| **前端** | [frontend.md](frontend.md) | A6, A7, A8, S1, S2, S3 | `next.config.js`、`middleware.ts`、`types.ts`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx` |
+| **前端** | [frontend.md](frontend.md) | A6, A7, A8, S1, S2, S3, S4 | `next.config.js`、`middleware.ts`、`types.ts`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx`、`account-settings-page.tsx` |
 | **Docker** | [docker.md](docker.md) | D2, D3, A4 | `docker-compose-dev.yaml`、`docker-compose.yaml` |
 | **脚本** | [scripts.md](scripts.md) | D4, D5, A5 | `entrypoint.sh`、`sitecustomize.py` |
 | **配置** | [config.md](config.md) | A9 | `.env.example` |

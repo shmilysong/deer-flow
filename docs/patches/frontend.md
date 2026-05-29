@@ -229,6 +229,40 @@ import "@/core/env-settings/extension";
 
 ---
 
+## S4：`account-settings-page.tsx` — ADS 账号字段隐藏
+
+**文件**: `frontend/src/components/workspace/settings/account-settings-page.tsx`
+**风险**: ✅ 极低（仅注释隐藏代码，不删除，恢复时删除注释块即可）
+
+### S4a — 隐藏 email/role 显示（L76-L98）
+
+原代码显示 `user.email`（固定为 `admin@example.com`）和 `user.system_role`（固定为 `user`），均为 ADS 占位值。改为只显示从 email 前缀提取的 ADS 账号名。
+
+```typescript
+{/*
+// 🚫 以下两行被隐藏——原因：
+//    当前使用 ADS 统一认证登录，返回的 email 为固定的
+//    "admin@example.com", system_role 为 "user"，均为占位值
+//    不反映实际 ADS 账号信息，显示出来会误导用户。
+//    改为只显示 ADS 账号名（从 email 前缀提取）。
+// ================================================================
+*/}
+<span className="text-muted-foreground text-sm">账号</span>
+<span className="text-sm font-medium">
+  {user?.email ? user.email.replace(/@.*$/, "") : "—"}
+</span>
+```
+
+### S4b — 隐藏修改密码表单（L103-L148）
+
+ADS 密码由统一认证管理，DeerFlow 原生 change-password API 不可用。整个 `SettingsSection` 包裹在 JSX 注释块中。
+
+**原因**: ADS 统一认证登录后，user.email 固定为 "admin@example.com"、system_role 为 "user"（占位值），原生修改密码 API 不可用。隐藏不正确的字段和不可用的功能。
+
+**恢复方法**: 删除 `{/*` 注释开始标记和 `*/}` 注释结束标记之间的代码块，并删掉新加的"账号"行。
+
+---
+
 ## 验证命令
 
 ```bash

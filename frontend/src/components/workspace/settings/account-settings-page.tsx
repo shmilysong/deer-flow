@@ -73,6 +73,14 @@ export function AccountSettingsPage() {
       <SettingsSection title={t.settings.account.profileTitle}>
         <div className="space-y-2">
           <div className="grid grid-cols-[max-content_max-content] items-center gap-4">
+            {/*
+            // ================================================================
+            // 🚫 以下两行被隐藏——原因：
+            //    当前使用 ADS 统一认证登录，返回的 email 为固定的
+            //    "admin@example.com", system_role 为 "user"，均为占位值
+            //    不反映实际 ADS 账号信息，显示出来会误导用户。
+            //    改为只显示 ADS 账号名（从 email 前缀提取）。
+            // ================================================================
             <span className="text-muted-foreground text-sm">
               {t.settings.account.email}
             </span>
@@ -83,10 +91,23 @@ export function AccountSettingsPage() {
             <span className="text-sm font-medium capitalize">
               {user?.system_role ?? "—"}
             </span>
+            */}
+            <span className="text-muted-foreground text-sm">账号</span>
+            <span className="text-sm font-medium">
+              {user?.email ? user.email.replace(/@.*$/, "") : "—"}
+            </span>
           </div>
         </div>
       </SettingsSection>
 
+      {/*
+      // ================================================================
+      // 🚫 以下"修改密码"区域被隐藏——原因：
+      //    当前使用 ADS 统一认证登录，密码由 ADS 统一管理，
+      //    无法通过 DeerFlow 原生 change-password API 修改密码。
+      //    展示此区域会给用户错误的预期（以为可以在这里改密码）。
+      //    保留代码供恢复参考。
+      // ================================================================
       <SettingsSection
         title={t.settings.account.changePasswordTitle}
         description={t.settings.account.changePasswordDescription}
@@ -124,6 +145,7 @@ export function AccountSettingsPage() {
           </Button>
         </form>
       </SettingsSection>
+      */}
 
       <SettingsSection title="" description="">
         <Button
