@@ -240,15 +240,15 @@ Proxied through nginx: `/api/langgraph/*` → LangGraph, all other `/api/*` → 
 
 **认证流程**：
 1. 用户输 ADS 账号密码 → `POST /login/ads` → DeerFlow 转发 ADS `/jwt/login`
-2. ADS JWT 设为 `HttpOnly` Cookie（`ads_token`），写入 MCP config.json
+2. ADS JWT 设为 `HttpOnly` Cookie（`access_token`），写入 MCP config.json
 3. 后续请求 → `ADSProxyMiddleware` → 解码 JWT → 设置 `_ads_authenticated`
 4. `AuthMiddleware` (`auth_middleware.py`) 通过 1 行守卫（Extension Hook）跳过原有认证
+5. `AuthMiddleware` 解码 JWT 时验证 `exp`（过期时间），过期则 401
 
-**核心改动**: `auth_middleware.py` `dispatch()` 中 1 行：
-```python
-if getattr(request.state, "_ads_authenticated", False):
-    return await call_next(request)
-```
+**核心改动**:
+1. `auth_middleware.py` `dispatch()` 中 inline ADS JWT 解码（~25 行）
+2. **新增 JWT exp 验证**（2026-05-29）— 解码 payload 后检查 `exp`，过期则 fall through 到原生认证路径
+3. Cookie 统一为 `access_token`，`max_age` 动态对齐 JWT 剩余寿命
 
 > ⚠️ **同步上游提醒**: 所有核心源码改动（含 data_collection 和 ads_auth）记录在 `docs/patches/ADS_AUTH_CORE_CHANGES.md`，`git pull` 后必须检查这些补丁是否被覆盖。
 

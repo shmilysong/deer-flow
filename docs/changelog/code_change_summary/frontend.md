@@ -723,3 +723,25 @@ export function MarkdownContent({
 ### 详细补丁
 
 详细补丁记录见 `@./docs/patches/settings-dialog-ext/frontend.md`（补丁标签 S1-S3）。
+
+---
+
+## 2026-05-29: 首屏闪屏修复 + ADS JWT 安全加固
+
+### `frontend/middleware.ts` — 中间件认证预检
+
+**改动**: `/` 路径处理逻辑从无条件 rewrite 改为先检查 `access_token` cookie。有 cookie 则 302 到 `/workspace`，无 cookie 才 rewrite 到 `/ads-login`。同时 cookie 名从 `ads_token` 统一为 `access_token`。
+
+**原因**: 消除已登录用户闪现登录页的问题；统一各层 cookie 命名。
+
+### `frontend/extensions/ads_auth/LoginPage.tsx` — loading 转圈
+
+**改动**: 新增 `isLoading` 状态，初始化时全屏居中显示 Loader2Icon 旋转动画，fetch 确认未认证后才渲染登录表单。
+
+**原因**: 已登录用户首次渲染时不闪现登录表单（与 middleware 预检双层保障）。
+
+### `frontend/src/core/auth/server.ts` — E2E 后门门控
+
+**改动**: `DEER_FLOW_AUTH_DISABLED` 外层包裹 `NODE_ENV === "test"` 条件。
+
+**原因**: 安全加固——E2E 测试后门仅在测试环境生效。

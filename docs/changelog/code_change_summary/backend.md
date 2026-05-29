@@ -402,3 +402,21 @@
 ### 详细补丁
 
 详细补丁记录见 `@./docs/patches/settings-dialog-ext/backend.md`（补丁标签 B1）
+
+---
+
+## 2026-05-29: 首屏闪屏修复 + ADS JWT 安全加固
+
+### `backend/app/gateway/auth_middleware.py` — ADS JWT exp 验证
+
+**改动**: 在 ADS JWT 解码段（L84-L90）新增 `exp` 字段提取和过期判断。如果 token 过期则跳过 ADS 认证路径，回退到原生 JWT 验证。
+
+**原因**: 安全漏洞修复——已过期的 ADS JWT 也能通过认证。
+
+### `deerflow_extensions/ads_auth/router.py` — 动态 max_age + 统一 cookie 名
+
+**改动**:
+1. 解码 JWT payload 提取 `exp`，动态计算 `max_age = max(exp - time.time(), 0)`
+2. 统一只设置 `access_token`，不再同时设置 `ads_token`
+
+**原因**: cookie 寿命与 JWT 对齐；统一 cookie 命名消除前端中间件/SSR/后端各层 cookie 名不一致的隐患。

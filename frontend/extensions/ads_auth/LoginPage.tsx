@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { Loader2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
@@ -23,12 +24,19 @@ export default function ADSLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const nextPath = validateNext(searchParams.get("next")) ?? "/workspace";
 
   useEffect(() => {
     fetch("/api/v1/auth/me", { credentials: "include" })
-      .then((r) => { if (r.ok) router.push(nextPath); })
-      .catch(() => {});
+      .then((r) => {
+        if (r.ok) {
+          router.push(nextPath);
+        } else {
+          setIsLoading(false);
+        }
+      })
+      .catch(() => setIsLoading(false));
   }, [router, nextPath]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,6 +64,14 @@ export default function ADSLoginPage() {
   };
 
   const actualTheme = theme === "system" ? resolvedTheme : theme;
+
+  if (isLoading) {
+    return (
+      <div className="bg-background flex min-h-screen items-center justify-center">
+        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center">

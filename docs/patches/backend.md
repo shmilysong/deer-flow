@@ -115,6 +115,27 @@ except Exception as _e:
 
 ---
 
+## A2c：`auth_middleware.py` — ADS JWT exp 验证（2026-05-29 新增）
+
+**文件**: `backend/app/gateway/auth_middleware.py`
+**行号**: L90-L95
+**风险**: ✅ 极低
+
+在 ADS JWT 解码段新增 exp 字段提取和过期判断：
+
+```python
+exp = payload.get("exp")                    # ← 新增 exp 提取
+if username:
+    if exp is not None and time.time() > exp:
+        pass                                 # token 过期 → fall through 到原生路径
+    else:
+        # ... 原有的创建 User 代码 ...
+```
+
+**原因**: 已过期的 ADS JWT 可通过中间件认证（原代码只取 username，不验证 exp）。
+
+---
+
 ## A3：`csrf_middleware.py` — CSRF 豁免路径
 
 **文件**: `backend/app/gateway/csrf_middleware.py`
@@ -154,10 +175,10 @@ except Exception as _e:
 
 ```python
 response.delete_cookie(key="access_token", ...)
-response.delete_cookie(key="ads_token", ...)   # ← ADDED for ADS Auth
+response.delete_cookie(key="ads_token", ...)   # ← 保留作为旧 cookie 残留清理
 ```
 
-**原因**: ADS 登录同时设置 `ads_token` 和 `access_token` 两个 cookie，原 logout 只清 `access_token`，导致用户点退出后 `ads_token` 残留 → middleware 仍放行 → 登出无效。
+**原因**: ADS 登录统一使用 `access_token`（2026-05-29 起不再设置 `ads_token`），但保留此行为以清除旧用户残留的 `ads_token`。
 
 ---
 

@@ -81,24 +81,30 @@ class AuthMiddleware(BaseHTTPMiddleware):
         ads_token = request.cookies.get("ads_token") or request.cookies.get("access_token")
         if ads_token:
             try:
-                import base64, json
+                import base64, json, time
                 parts = ads_token.split(".")
                 if len(parts) == 3:
                     padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
                     payload = json.loads(base64.urlsafe_b64decode(padded))
                     username = payload.get("username")
+                    exp = payload.get("exp")
                     if username:
-                        import uuid
-                        deterministic_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"ads-{username}"))
-                        from app.gateway.auth.models import User
-                        user = User(
-                            id=deterministic_id,
-                            email=f"{username}@example.com",
-                            system_role="user",
-                        )
-                        request.state.user = user
-                        set_current_user(user)
-                        return await call_next(request)
+                        # 验证 JWT 是否过期
+                        if exp is not None and time.time() > exp:
+                            # token 过期，不创建 User，直接 fall through 到原生路径
+                            pass
+                        else:
+                            import uuid
+                            deterministic_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"ads-{username}"))
+                            from app.gateway.auth.models import User
+                            user = User(
+                                id=deterministic_id,
+                                email=f"{username}@example.com",
+                                system_role="user",
+                            )
+                            request.state.user = user
+                            set_current_user(user)
+                            return await call_next(request)
             except Exception:
                 import traceback, logging
                 logging.getLogger(__name__).warning("[ADS] dispatch decode failed: %s", traceback.format_exc())
