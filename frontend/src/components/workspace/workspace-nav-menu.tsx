@@ -29,6 +29,10 @@ import { useI18n } from "@/core/i18n/hooks";
 
 import { GithubIcon } from "./github-icon";
 import { SettingsDialog } from "./settings";
+import { getSettingsExtensions } from "@/core/settings-extensions";
+// --- EXTENSION IMPORT: begin ---
+import "@/core/env-settings/extension";
+// --- EXTENSION IMPORT: end ---
 
 function NavMenuButtonContent({
   isSidebarOpen,
@@ -63,12 +67,16 @@ export function WorkspaceNavMenu() {
     setMounted(true);
   }, []);
 
+  const extensions = getSettingsExtensions();
+
   return (
     <>
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         defaultSection={settingsDefaultSection}
+        additionalSections={extensions}
+        hiddenSectionIds={["about"]}
       />
       <SidebarMenu className="w-full">
         <SidebarMenuItem>

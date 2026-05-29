@@ -39,10 +39,21 @@ type SettingsSection =
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
+  // --- EXTENSION SLOT: begin ---
+  additionalSections?: Array<{
+    id: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    component: React.ComponentType;
+  }>;
+  hiddenSectionIds?: string[];
+  // --- EXTENSION SLOT: end ---
 };
 
 export function SettingsDialog(props: SettingsDialogProps) {
-  const { defaultSection = "appearance", ...dialogProps } = props;
+  // --- EXTENSION SLOT: begin ---
+  const { defaultSection = "appearance", additionalSections = [], hiddenSectionIds = [], ...dialogProps } = props;
+  // --- EXTENSION SLOT: end ---
   const { t } = useI18n();
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(defaultSection);
@@ -57,29 +68,38 @@ export function SettingsDialog(props: SettingsDialogProps) {
 
   const sections = useMemo(
     () => [
-      {
-        id: "account",
-        label: t.settings.sections.account,
-        icon: UserIcon,
-      },
-      {
-        id: "appearance",
-        label: t.settings.sections.appearance,
-        icon: PaletteIcon,
-      },
-      {
-        id: "notification",
-        label: t.settings.sections.notification,
-        icon: BellIcon,
-      },
-      {
-        id: "memory",
-        label: t.settings.sections.memory,
-        icon: BrainIcon,
-      },
-      { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
-      { id: "skills", label: t.settings.sections.skills, icon: SparklesIcon },
-      { id: "about", label: t.settings.sections.about, icon: InfoIcon },
+      // --- EXTENSION SLOT: begin ---
+      ...[
+        {
+          id: "account",
+          label: t.settings.sections.account,
+          icon: UserIcon,
+        },
+        {
+          id: "appearance",
+          label: t.settings.sections.appearance,
+          icon: PaletteIcon,
+        },
+        {
+          id: "notification",
+          label: t.settings.sections.notification,
+          icon: BellIcon,
+        },
+        {
+          id: "memory",
+          label: t.settings.sections.memory,
+          icon: BrainIcon,
+        },
+        { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
+        { id: "skills", label: t.settings.sections.skills, icon: SparklesIcon },
+        { id: "about", label: t.settings.sections.about, icon: InfoIcon },
+      ].filter((s) => !hiddenSectionIds.includes(s.id)),
+      ...additionalSections.map((s) => ({
+        id: s.id,
+        label: s.label,
+        icon: s.icon,
+      })),
+      // --- EXTENSION SLOT: end ---
     ],
     [
       t.settings.sections.account,
@@ -89,6 +109,10 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.skills,
       t.settings.sections.notification,
       t.settings.sections.about,
+      // --- EXTENSION SLOT: begin ---
+      hiddenSectionIds.join(","),
+      additionalSections,
+      // --- EXTENSION SLOT: end ---
     ],
   );
   return (
@@ -144,6 +168,9 @@ export function SettingsDialog(props: SettingsDialogProps) {
               )}
               {activeSection === "notification" && <NotificationSettingsPage />}
               {activeSection === "about" && <AboutSettingsPage />}
+              {/* --- EXTENSION SLOT: begin --- */}
+              {additionalSections?.map((s) => activeSection === s.id ? <s.component /> : null)}
+              {/* --- EXTENSION SLOT: end --- */}
             </div>
           </ScrollArea>
         </div>

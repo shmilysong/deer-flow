@@ -181,6 +181,69 @@ response.delete_cookie(key="ads_token", ...)   # ← ADDED for ADS Auth
 
 ---
 
+---
+
+## B1：`app.py` — env_settings 路由注册
+
+**文件**: `backend/app/gateway/app.py`
+**风险**: ✅ 极低（与现有路由注册模式完全一致）
+
+### B1a — import env_settings 路由器（L20）
+
+```python
+from app.gateway.routers import (
+    agents,
+    artifacts,
+    assistants_compat,
+    auth,
+    channels,
+    env_settings,   # ← ADDED
+    feedback,
+    mcp,
+    memory,
+    models,
+    runs,
+    skills,
+    suggestions,
+    thread_runs,
+    threads,
+    uploads,
+)
+```
+
+**原因**: 导入新创建的 `env_settings` 路由模块。
+
+### B1b — openapi_tags 增加 env-settings 标签（L314-L316）
+
+```python
+            {
+                "name": "env-settings",
+                "description": "Manage environment variable settings and DeepSeek API key verification",
+            },
+```
+
+**原因**: 在 OpenAPI 文档中为 `env-settings` 路由分组添加标签描述。
+
+### B1c — 注册 env_settings 路由器（L413-L414）
+
+```python
+    # Env Settings API is mounted at /api/env-settings
+    app.include_router(env_settings.router)
+```
+
+**原因**: 注册 `env_settings` 路由模块，挂载点在 `/api/env-settings`，提供环境变量读取/更新/验证接口。
+
+**配套文件**（新创建的核心文件，不计入核心源码改动）：
+
+`backend/app/gateway/routers/env_settings.py`（136 行）— 3 个端点：
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/env-settings` | 读取环境变量（值已掩码） |
+| `PUT` | `/api/env-settings` | 更新 DeepSeek API Key 并写入 `.env` 文件 |
+| `POST` | `/api/env-settings/deepseek/verify` | 向 DeepSeek API 发测试请求验证 Key 有效性 |
+
+---
+
 ## 验证命令
 
 ```bash
@@ -204,4 +267,13 @@ grep -n "ads_token" backend/app/gateway/routers/auth.py
 
 # === A10: deps.py state.user ===
 grep -n "user_from_state\|request.state.user" backend/app/gateway/deps.py
+
+# === B1a: app.py env_settings import ===
+grep -n "env_settings" backend/app/gateway/app.py | head -3
+
+# === B1b: app.py env_settings include_router ===
+grep -n "env_settings.router" backend/app/gateway/app.py
+
+# === B1c: app.py env-settings openapi tag ===
+grep -n "env-settings" backend/app/gateway/app.py
 ```

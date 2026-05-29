@@ -17,6 +17,7 @@ from app.gateway.routers import (
     assistants_compat,
     auth,
     channels,
+    env_settings,
     feedback,
     mcp,
     memory,
@@ -310,6 +311,10 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
                 "description": "LangGraph Platform-compatible runs lifecycle (create, stream, cancel)",
             },
             {
+                "name": "env-settings",
+                "description": "Manage environment variable settings and DeepSeek API key verification",
+            },
+            {
                 "name": "health",
                 "description": "Health check and system status endpoints",
             },
@@ -404,6 +409,9 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Stateless Runs API (stream/wait without a pre-existing thread)
     app.include_router(runs.router)
+
+    # Env Settings API is mounted at /api/env-settings
+    app.include_router(env_settings.router)
 
     @app.get("/health", tags=["health"])
     async def health_check() -> dict:

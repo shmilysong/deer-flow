@@ -368,3 +368,37 @@
 - `router.py` — cookie `secure=True → False`
 - `startup.py` — 不再注册 ADSProxyMiddleware
 - `config.py` — 增加 `.env` 自动加载
+
+---
+
+## 8. 新增 env-settings 路由
+
+**动机**: 提供环境变量设置管理 API，支持前端在 SettingsDialog 中直接配置 DeepSeek API Key 并验证连通性。
+
+### 核心改动
+
+**B1：`backend/app/gateway/app.py` — env_settings 路由注册**
+
+| 位置 | 行号 | 改动 |
+|------|------|------|
+| import | L20 | `from app.gateway.routers import ... env_settings ...` |
+| openapi_tags | L314-L316 | 新增 `env-settings` 标签描述 |
+| include_router | L413-L414 | `app.include_router(env_settings.router)` |
+
+### 配套模块（后端核心，非补丁）
+
+**`backend/app/gateway/routers/env_settings.py`**（136 行，3 个端点）：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/env-settings` | 读取环境变量（值已掩码） |
+| `PUT` | `/api/env-settings` | 更新 DeepSeek API Key 并写入 `.env` |
+| `POST` | `/api/env-settings/deepseek/verify` | 验证 Key 有效性 |
+
+### 配套前端模块
+
+`frontend/src/core/env-settings/`（5 个文件）：types / api / hooks / page / extension，通过 `registerSettingsExtension()` 向 SettingsDialog 注入 API Keys 设置页面。
+
+### 详细补丁
+
+详细补丁记录见 `@./docs/patches/settings-dialog-ext/backend.md`（补丁标签 B1）

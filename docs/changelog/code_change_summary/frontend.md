@@ -668,3 +668,48 @@ export function MarkdownContent({
 | 后端回归（setup-status / login-local / me） | 200 / 410 / 401 ✅ |
 
 **改动文件**: `frontend/next.config.js` — 新增 `beforeFiles` rewrites + 保留原有 API proxy rewrites
+
+---
+
+## SettingsDialog 扩展架构
+
+**动机**: 为第三方扩展提供向 SettingsDialog 注入自定义设置页面的能力，无需修改核心组件。采用 EXTENSION SLOT 标记 + 注册表模式，支持任意数量的扩展页面。
+
+### 核心改动
+
+**S1：`settings-dialog.tsx` — 4 处 EXTENSION SLOT 插槽**
+
+| 位置 | 行号 | 改动 |
+|------|------|------|
+| Props 定义 | L42-L51 | 增加 `additionalSections` 和 `hiddenSectionIds` 两个可选 props |
+| 解构赋值 | L54-L56 | 从 props 中解构新字段，带默认值 |
+| sections 数组合并 | L69-L117 | 内置 sections 用 `hiddenSectionIds` 过滤后，追加 `additionalSections` |
+| 渲染区域 | L171-L173 | 匹配 `activeSection` 时渲染扩展组件 |
+
+**S2：`registry.ts` — SettingsExtension 注册表（新文件）**
+
+- `frontend/src/core/settings-extensions/registry.ts` — 类型定义 + 注册/获取/清空
+- `frontend/src/core/settings-extensions/index.ts` — re-export
+
+**S3：`workspace-nav-menu.tsx` — 集成扩展注册表**
+
+| 位置 | 行号 | 改动 |
+|------|------|------|
+| import | L30-L35 | 增加 `getSettingsExtensions` + `import "@/core/env-settings/extension"` |
+| 透传 | L70-L80 | `getSettingsExtensions()` → `additionalSections` prop |
+
+### 配套模块（前端核心，非补丁）
+
+**`frontend/src/core/env-settings/`**（5 个文件）:
+
+| 文件 | 说明 |
+|------|------|
+| `types.ts` | API 类型定义 |
+| `api.ts` | `fetch` 封装 |
+| `hooks.ts` | TanStack Query hooks |
+| `env-settings-page.tsx` | 设置页面 UI |
+| `extension.ts` | 注册入口，`registerSettingsExtension()` |
+
+### 详细补丁
+
+详细补丁记录见 `@./docs/patches/settings-dialog-ext/frontend.md`（补丁标签 S1-S3）。
