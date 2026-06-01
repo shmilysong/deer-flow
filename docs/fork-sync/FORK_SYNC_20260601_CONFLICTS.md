@@ -75,3 +75,17 @@
 ### 提交 `848ace98` → `00a90bbd` — init_token 生命周期
 
 **说明**：`848ace98` 引入了 init_token 机制，但被后续的 `00a90bbd` 提交移除（refactor: Remove init_token handling）。两个提交均已成功 cherry-pick，最终 HEAD 与 `upstream/main` 均无 init_token，一致 ✅
+
+---
+
+## 上游变更总览
+
+本次同步的 274 个上游提交中，重要更新包括：
+
+| 类别 | 重点变更 |
+|------|---------|
+| **架构重构** | persistence SQL 化 + run history 持久化 + event store 重构（run 重启恢复）、per-user 隔离路径完善 |
+| **新功能** | DingTalk 频道集成、静态 system prompt（DynamicContextMiddleware）、custom-agent 自更新、BlockingIO 运行时防护、subagent token 用量追踪 |
+| **稳定性修复** | 大量 channel 修复（Feishu 澄清连续性、Discord 增强）、gateway run 状态恢复、memory updater 修复、MCP session pool 修复、JSON parse 包装修复、on_disconnect 处理 |
+| **前端** | Mermaid 预览修复、streaming AI content <think> 标签清理、sidebar 即时更新、clipboard 安全守卫 |
+| **安全性** | CSRF 处理增强、internal auth token 跨 worker 共享、symlinked upload 拒绝 |

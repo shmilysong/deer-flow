@@ -249,10 +249,10 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 
 ## 历史同步记录
 
-| 日期 | 同步范围 | 提交数 | 冲突数 | HEAD | 文档 |
-|------|---------|--------|--------|------|------|
-| 2026-05-07 | fork 分叉点后 | 128 | 6 | 939aff04 | [`FORK_SYNC_20260507.md`](FORK_SYNC_20260507.md) |
-| 2026-06-01 | fork 分叉点后 | 274 | 3 | be7a1685 | [`FORK_SYNC_20260601_CONFLICTS.md`](FORK_SYNC_20260601_CONFLICTS.md) |
+| 日期 | 同步范围 | 提交数 | 冲突数 | HEAD | 变更摘要 | 文档 |
+|------|---------|--------|--------|------|---------|------|
+| 2026-05-07 | fork 分叉点后 | 128 | 6 | 939aff04 | 上游大版本重构：Gateway 嵌入 LangGraph 运行时、认证系统重构（auth_middleware/CSRF）、Docker 大幅改造（docker.sh/nginx/compose）、Makefile 重构、DingTalk/Serper 等新集成 | [`FORK_SYNC_20260507.md`](FORK_SYNC_20260507.md) |
+| 2026-06-01 | fork 分叉点后 | 274 | 3 | be7a1685 | 上游大量稳定性修复：persistence SQL 化 + run history 持久化 + event store 重构、per-user 隔离完善、DingTalk/Feishu 频道增强、静态 system prompt 优化、run 恢复机制、subagent token 用量追踪、BlockingIO 防护 | [`FORK_SYNC_20260601_CONFLICTS.md`](FORK_SYNC_20260601_CONFLICTS.md) |
 
 ---
 
