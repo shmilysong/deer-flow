@@ -71,3 +71,4 @@ release/
 ads-agent-mcp/
 ads-agent-mcp/.ads-mcp/config.json
 training_logs/*
+backend/data_collection_logs/

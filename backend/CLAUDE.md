@@ -310,7 +310,7 @@ Proxied through nginx: `/api/langgraph/*` → Gateway LangGraph-compatible runti
 2. **新增 JWT exp 验证**（2026-05-29）— 解码 payload 后检查 `exp`，过期则 fall through 到原生认证路径
 3. Cookie 统一为 `access_token`，`max_age` 动态对齐 JWT 剩余寿命
 
-> ⚠️ **同步上游提醒**: 所有核心源码改动（含 data_collection 和 ads_auth）记录在 `docs/patches/ADS_AUTH_CORE_CHANGES.md`，`git pull` 后必须检查这些补丁是否被覆盖。
+> ⚠️ **同步上游提醒**: 所有核心源码改动（含 data_collection 和 ads_auth）记录在 `docs/patches/README.md`，`git pull` 后必须检查这些补丁是否被覆盖。
 
 ### Sandbox System (`packages/harness/deerflow/sandbox/`)
 
@@ -403,10 +403,6 @@ Proxied through nginx: `/api/langgraph/*` → Gateway LangGraph-compatible runti
 
 Bridges external messaging platforms (Feishu, Slack, Telegram, DingTalk) to the DeerFlow agent via Gateway's LangGraph-compatible API.
 
-
-**Architecture**: Channels communicate with Gateway through the `langgraph-sdk` HTTP client (same as the frontend), ensuring threads are created and managed server-side. The internal SDK client injects process-local internal auth plus a matching CSRF cookie/header pair so Gateway accepts state-changing thread/run requests from channel workers without relying on browser session cookies.
-Bridges external messaging platforms (Feishu, Slack, Telegram) to the DeerFlow agent via Gateway's LangGraph-compatible API.
-
 **Architecture**: Channels communicate with Gateway through the `langgraph-sdk` HTTP client (same as the frontend), ensuring threads are created and managed server-side. The internal SDK client injects process-local internal auth plus a matching CSRF cookie/header pair so Gateway accepts state-changing thread/run requests from channel workers without relying on browser session cookies.
 
 **Components**:
@@ -434,8 +430,6 @@ Bridges external messaging platforms (Feishu, Slack, Telegram) to the DeerFlow a
 - In Docker Compose, IM channels run inside the `gateway` container, so `localhost` points back to that container. Use `http://gateway:8001/api` for `langgraph_url` and `http://gateway:8001` for `gateway_url`, or set `DEER_FLOW_CHANNELS_LANGGRAPH_URL` / `DEER_FLOW_CHANNELS_GATEWAY_URL`.
 - Per-channel configs: `feishu` (app_id, app_secret), `slack` (bot_token, app_token), `telegram` (bot_token), `dingtalk` (client_id, client_secret, optional `card_template_id` for AI Card streaming)
 
-- Per-channel configs: `feishu` (app_id, app_secret), `slack` (bot_token, app_token), `telegram` (bot_token)
-
 ### Memory System (`packages/harness/deerflow/agents/memory/`)
 
 **Components**:
@@ -448,10 +442,6 @@ Bridges external messaging platforms (Feishu, Slack, Telegram) to the DeerFlow a
 - Memory is stored per-user at `{base_dir}/users/{user_id}/memory.json`
 - Per-agent per-user memory at `{base_dir}/users/{user_id}/agents/{agent_name}/memory.json`
 - Custom agent definitions (`SOUL.md` + `config.yaml`) are also per-user at `{base_dir}/users/{user_id}/agents/{agent_name}/`. The legacy shared layout `{base_dir}/agents/{agent_name}/` remains read-only fallback for unmigrated installations
-- `user_id` is resolved via `get_effective_user_id()` from `deerflow.runtime.user_context`
-- In no-auth mode, `user_id` defaults to `"default"` (constant `DEFAULT_USER_ID`)
-- Absolute `storage_path` in config opts out of per-user isolation
-- **Migration**: Run `PYTHONPATH=. python scripts/migrate_user_isolation.py` to move legacy `memory.json`, `threads/`, and `agents/` into per-user layout. Supports `--dry-run` (preview changes) and `--user-id USER_ID` (assign unowned legacy data to a user, defaults to `default`).
 - `user_id` is resolved via `get_effective_user_id()` from `deerflow.runtime.user_context`
 - In no-auth mode, `user_id` defaults to `"default"` (constant `DEFAULT_USER_ID`)
 - Absolute `storage_path` in config opts out of per-user isolation

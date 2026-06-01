@@ -110,11 +110,29 @@ grep -c "training_logs" docker/docker-compose.yaml
 ### Step 6: 修复构建错误
 
 ```bash
+# 后端语法检查
+cd backend && find . -name "*.py" -not -path "*/__pycache__/*" \
+  -exec python3 -m py_compile {} \; 2>&1 | grep -v "Permission denied"
+
+# 对关键文件做引用计数快照（确认本地自定义未丢失）
+for f in backend/packages/harness/deerflow/tools/builtins/task_tool.py \
+         backend/packages/harness/deerflow/tools/builtins/setup_agent_tool.py \
+         backend/packages/harness/deerflow/models/factory.py; do
+    echo "$f: app_config=$(grep -c 'app_config' "$f")"
+done
+
 # 前端构建验证
 cd frontend && SKIP_ENV_VALIDATION=1 pnpm build
 
-# 后端语法验证
-cd backend && find . -name "*.py" -exec python3 -m py_compile {} \; 2>&1 | grep -v "Permission denied"
+# 前端类型检查（对冲突文件）
+cd frontend && npx tsc --noEmit --strict src/path/to/conflicted-file.tsx
+
+# 确认 .env 关键变量保持注释（rewrite 代理模式）
+grep -n "^NEXT_PUBLIC_BACKEND_BASE_URL" frontend/.env
+
+# 工作区状态确认
+git status --short
+git diff --stat
 ```
 
 ### Step 7: 运行测试
@@ -194,11 +212,14 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 
 - [ ] 11 个侵入点 grep 检查通过
 - [ ] `deerflow_extensions/` 目录完整（与 backup-main 一致）
-- [ ] `.env.example` 中 ADS 配置完好
+- [ ] 后端全量 `.py` 语法检查通过（`python3 -m py_compile`）
+- [ ] 关键文件的本地自定义引用计数正常（`app_config`、`user_id` 等）
+- [ ] `.env` 中 `NEXT_PUBLIC_BACKEND_BASE_URL` 保持注释状态
 - [ ] 前端 `pnpm build` 通过
 - [ ] 后端 Gateway 启动，health 返回 200
 - [ ] `make test` 通过率 >= 99%
 - [ ] 无未解决的冲突标记残留（`grep -r "<<<<<<<" backend/ frontend/` 为空）
+- [ ] 工作区干净（`git status --short` 无意外修改）
 
 ---
 
@@ -208,6 +229,110 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 |------|---------|--------|--------|------|------|
 | 2026-05-07 | fork 分叉点后 | 128 | 6 | 939aff04 | [`FORK_SYNC_20260507.md`](FORK_SYNC_20260507.md) |
 | 2026-06-01 | fork 分叉点后 | 274 | 3 | be7a1685 | [`FORK_SYNC_20260601_CONFLICTS.md`](FORK_SYNC_20260601_CONFLICTS.md) |
+
+---
+
+## 经验教训
+
+以下记录前两次同步中遇到的问题及其预防措施，供后续同步参考。
+
+### 教训 1：冲突解决后必须做语法/类型检查
+
+**问题**：冲突标记清除后，`skills_config.py` 仍存在重复 `description` 和缩进错误未被发现就提交了，导致后端无法启动。
+
+**根因**：场景 C 冲突（双方改了相同区域）手动编辑后，开发者只确认了"冲突标记已清除"和"逻辑看起来对"，没有运行语法/静态检查。
+
+**预防**：在 Step 6 的验证中加入：
+
+```bash
+# Python 语法检查（所有 .py 文件）
+cd backend && find . -name "*.py" -not -path "*/__pycache__/*" \
+  -exec python3 -m py_compile {} \; 2>&1 | grep -v "Permission denied"
+
+# 前端类型检查（至少对冲突文件）
+cd frontend && npx tsc --noEmit --strict src/path/to/conflicted-file.tsx
+```
+
+### 教训 2：绝对禁止用 `git checkout` 解决冲突
+
+**问题**：为了修复语法错误，执行了 `git checkout upstream/main -- backend/packages/harness/deerflow/`，导致 `task_tool.py` 中 6 处 `app_config` 引用被上游版本覆盖（29 → 23）。工作区被"污染"后差点将本地自定义丢失。
+
+**根因**：`git checkout <branch> -- <file>` 是**完全替换**，等价于 `--theirs`。这和场景 C 的"手动合并保留双方"原则完全矛盾。
+
+**预防**：牢记一条铁律：
+
+> **冲突解决只能用编辑器手动合并，禁止使用 `git checkout <branch> -- <file>` 或 `git checkout --ours/theirs` 替代。**
+
+如果必须恢复特定文件，使用 `git checkout HEAD -- <file>`（恢复成本地版本）或 `git checkout upstream/main -- <file>`（丢弃本地改用上游），但必须理解这是"放弃一方"，事后要用回归验证确认。
+
+验证完整性：
+
+```bash
+# 对关键文件做引用计数快照，与 backup-main 对比
+for f in backend/packages/harness/deerflow/tools/builtins/task_tool.py \
+         backend/packages/harness/deerflow/tools/builtins/setup_agent_tool.py \
+         backend/packages/harness/deerflow/models/factory.py; do
+    echo "$f: app_config=$(grep -c 'app_config' "$f")"
+done
+```
+
+### 教训 3：`.env` 文件不可随意修改
+
+**问题**：往 `.env` 加了 `NEXT_PUBLIC_BACKEND_BASE_URL=http://localhost:8001`，但 `next.config.js` 的 API rewrite 规则在检测到这个变量后**全部跳过**，导致前端 `/api/*` 请求直接发到后端端口（跨端口 Cookie 丢失）而非通过 Next.js 代理，返回 404。
+
+**根因**：`.env` 是 gitignored 文件，容易在调试时被随意修改。`NEXT_PUBLIC_*` 变量控制了 `next.config.js` 的关键行为。
+
+**预防**：
+
+```bash
+# 确认关键变量保持注释状态（rewrite 代理模式）
+grep -n "^NEXT_PUBLIC_BACKEND_BASE_URL" frontend/.env
+# 应该输出一行注释，如：# NEXT_PUBLIC_BACKEND_BASE_URL="http://localhost:8001"
+
+# 与 .env.example 对比差异（忽略注释）
+diff <(grep -v '^#' frontend/.env.example | grep -v '^$') \
+     <(grep -v '^#' frontend/.env | grep -v '^$')
+```
+
+#### `.env` 关键变量速查表
+
+| 变量 | 作用 | 同步后应保持的状态 |
+|------|------|------------------|
+| `NEXT_PUBLIC_BACKEND_BASE_URL` | 控制 Next.js API rewrite | **注释掉**，让 rewrite 生效 |
+| `NEXT_PUBLIC_LANGGRAPH_BASE_URL` | LangGraph 路由模式 | **注释掉**或用兼容模式 |
+| `DEER_FLOW_INTERNAL_GATEWAY_BASE_URL` | SSR 内部访问 Gateway 地址 | 不设置（默认 `http://127.0.0.1:8001`，与 uvicorn 端口一致） |
+
+### 教训 4：前端文件冲突后需做去重审查
+
+**问题**：多个前端文件（`message-list.tsx`、`settings-dialog.tsx`、`page.tsx` 等）在冲突解决后出现重复 import、重复 JSX props、重复标签嵌套等问题，导致 `pnpm build` 失败。
+
+**根因**：场景 C 冲突中双方在同一函数块各自添加了不同代码，合并后出现了：上游加了 `import`、本地也加了同名 `import`；上游改了 `output:`、本地也改了——两行同时保留。开发者手动合并时只关注了冲突标记，没有检查整体结构。
+
+**预防**：在 Step 6 的构建验证前增加去重检查：
+
+```bash
+# 检查冲突文件是否存在重复 import（一种常见的合并残留特征）
+grep -c "^import " frontend/src/components/workspace/messages/message-list.tsx | \
+  sort | uniq -d
+
+# 检查是否有重复的 JSX prop 键（如 className 出现两次）
+# TypeScript 构建时自然会报错，但可以预先发现
+```
+
+如果冲突文件数量较多（超过 5 个），建议优先 `pnpm build` 让编译器一次性暴露所有语法/类型错误，集中修复。
+
+### 教训 5：工作区状态要始终保持干净
+
+**问题**：多次在不同终端操作导致工作区、索引、HEAD 三者状态不一致。部分修复在某个终端做了但没被 commit，另一终端又以旧状态为基础继续操作。
+
+**根因**：多终端切换 + 异步操作，缺乏单一的工作区状态管理。
+
+**预防**：每次操作前确认工作区干净：
+
+```bash
+git status --short   # 确保无未暂存修改
+git diff --stat      # 确认差异在预期范围内
+```
 
 ---
 
