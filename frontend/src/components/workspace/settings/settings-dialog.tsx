@@ -169,7 +169,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "notification" && <NotificationSettingsPage />}
               {activeSection === "about" && <AboutSettingsPage />}
               {/* --- EXTENSION SLOT: begin --- */}
-              {additionalSections?.map((s) => activeSection === s.id ? <s.component /> : null)}
+              {additionalSections?.map((s) => activeSection === s.id ? <s.component key={s.id} /> : null)}
               {/* --- EXTENSION SLOT: end --- */}
             </div>
           </ScrollArea>
