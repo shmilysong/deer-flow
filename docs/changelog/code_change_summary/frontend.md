@@ -745,3 +745,30 @@ export function MarkdownContent({
 **改动**: `DEER_FLOW_AUTH_DISABLED` 外层包裹 `NODE_ENV === "test"` 条件。
 
 **原因**: 安全加固——E2E 测试后门仅在测试环境生效。
+
+---
+
+## 2026-06-01: API Keys 配置界面优化
+
+### 前端文件变更
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `frontend/src/core/env-settings/types.ts` | 删除 | 迁至 `extensions/env-settings/` |
+| `frontend/src/core/env-settings/api.ts` | 删除 | 迁至 `extensions/env-settings/` |
+| `frontend/src/core/env-settings/hooks.ts` | 删除 | 迁至 `extensions/env-settings/` |
+| `frontend/src/core/env-settings/providers.ts` | 删除 | 迁至 `extensions/env-settings/` |
+| `frontend/src/core/env-settings/env-settings-page.tsx` | 删除 | 迁至 `extensions/env-settings/` |
+| `frontend/src/core/env-settings/extension.ts` | 删除 | 迁至 `extensions/env-settings/` |
+| `frontend/extensions/env-settings/` (6 个文件) | 新建 | 独立扩展目录，零侵入官方源码 |
+| `frontend/src/components/workspace/workspace-nav-menu.tsx` | 修改 | import 路径指向 `extensions/env-settings/extension` |
+
+### 新增能力
+
+- 支持 7 个国产大模型厂商管理：硅基流动、DeepSeek、Kimi、Doubao、千问、MiniMax、GLM
+- 服务商下拉选择器
+- 模型下拉选择（预置 + 自定义输入）
+- 自定义请求地址（可选）
+- Key 连通性验证
+- 一键清除厂商全部配置
+- `.env` 文件缺失时正常降级

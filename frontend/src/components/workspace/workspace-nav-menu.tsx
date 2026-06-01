@@ -31,7 +31,7 @@ import { GithubIcon } from "./github-icon";
 import { SettingsDialog } from "./settings";
 import { getSettingsExtensions } from "@/core/settings-extensions";
 // --- EXTENSION IMPORT: begin ---
-import "@/core/env-settings/extension";
+import "../../../extensions/env-settings/extension";
 // --- EXTENSION IMPORT: end ---
 
 function NavMenuButtonContent({

@@ -1,10 +1,12 @@
 import { fetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
+
 import type {
   EnvSettingsResponse,
   EnvSettingsUpdateRequest,
   EnvSettingsUpdateResponse,
   VerifyResponse,
+  DeleteResponse,
 } from "./types";
 
 export async function loadEnvSettings(): Promise<EnvSettingsResponse> {
@@ -22,14 +24,30 @@ export async function updateEnvSetting(
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || "Failed to save API Key");
+    throw new Error(errorData.detail ?? "Failed to save API Key");
   }
   return response.json() as Promise<EnvSettingsUpdateResponse>;
 }
 
-export async function verifyDeepseekKey(): Promise<VerifyResponse> {
+export async function deleteEnvSetting(
+  provider: string,
+): Promise<DeleteResponse> {
   const response = await fetch(
-    `${getBackendBaseURL()}/api/env-settings/deepseek/verify`,
+    `${getBackendBaseURL()}/api/env-settings/${encodeURIComponent(provider)}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail ?? "Failed to delete API Key");
+  }
+  return response.json() as Promise<DeleteResponse>;
+}
+
+export async function verifyProviderKey(
+  provider: string,
+): Promise<VerifyResponse> {
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/env-settings/${encodeURIComponent(provider)}/verify`,
     { method: "POST" },
   );
   return response.json() as Promise<VerifyResponse>;

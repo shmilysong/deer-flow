@@ -2,35 +2,37 @@
 
 本文件为 AI 编程助手（Claude Code、Codex、Cursor、Windsurf 等）提供 DeerFlow 项目指导。
 
-## ⚠️ 铁律：启动 DeerFlow 必须使用封装好的 make 命令
+## ⚠️ 铁律：启动/停止 DeerFlow 必须使用 start-deerflow.sh
 
-**绝对禁止**自作主张使用 `uv run`、`python -m`、`./scripts/serve.sh` 等底层命令启动 DeerFlow。
+**绝对禁止**使用 `make`、`uv run`、`python -m`、`docker compose`、`./scripts/serve.sh` 等命令。
 
-**唯一正确方式**：使用项目提供的 Makefile 封装命令：
+**唯一正确方式**：
 
 ```bash
-# ✅ 本地开发启动（正确方式）
-make dev              # 启动所有本地开发服务
-make docker-start     # Docker 开发模式启动
+# ✅ 编译 + 后台启动（正确方式）
+bash scripts/start-deerflow.sh
 
-# ❌ 禁止使用以下方式（自作主张）
-uv run python ...     # 禁止
-python -m ...        # 禁止
-./scripts/serve.sh    # 禁止
+# ✅ 停止服务
+bash scripts/start-deerflow.sh --stop
+
+# ✅ 重启（先停→编译→再启）
+bash scripts/start-deerflow.sh --restart
+
+# ❌ 禁止以下任何方式（自作主张）
+make dev               # 禁止（用了 serve.sh + docker）
+make docker-start      # 禁止
+docker compose ...     # 禁止
+./scripts/serve.sh     # 禁止
+uv run uvicorn ...     # 禁止
+pnpm dev               # 禁止
 ```
 
-**可用的 make 命令**：
+**日志查看**：
 
-| 命令 | 用途 |
-|------|------|
-| `make dev` | 本地开发模式（热更新） |
-| `make dev-pro` | 本地开发 + Gateway 模式 |
-| `make start` | 本地生产模式 |
-| `make start-pro` | 本地生产 + Gateway 模式 |
-| `make docker-start` | Docker 开发模式启动 |
-| `make docker-stop` | Docker 开发模式停止 |
-| `make doctor` | 诊断配置和环境问题 |
-| `make check` | 检查依赖是否完整 |
+```bash
+tail -f logs/gateway.log    # 后端日志
+tail -f logs/frontend.log   # 前端日志
+```
 
 ## 项目概述
 

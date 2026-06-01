@@ -16,7 +16,6 @@ from app.gateway.routers import (
     assistants_compat,
     auth,
     channels,
-    env_settings,
     feedback,
     mcp,
     memory,
@@ -329,10 +328,6 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
                 "description": "LangGraph Platform-compatible runs lifecycle (create, stream, cancel)",
             },
             {
-                "name": "env-settings",
-                "description": "Manage environment variable settings and DeepSeek API key verification",
-            },
-            {
                 "name": "health",
                 "description": "Health check and system status endpoints",
             },
@@ -355,6 +350,20 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
         logger.warning("[ADSAuth] Package not found, ADS auth is disabled")
     except Exception as _e2:
         logger.warning(f"[ADSAuth] Install failed: {_e2}")
+
+    # —— Extension: Env Settings (multi-provider API router) —————
+    import sys as _sys3
+    _ext_path3 = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
+    if _ext_path3 not in _sys3.path:
+        _sys3.path.insert(0, _ext_path3)
+    try:
+        from deerflow_extensions.env_settings.startup import install_env_settings
+        install_env_settings(app=app)
+        logger.info("[EnvSettings] Multi-provider router installed")
+    except ImportError:
+        logger.warning("[EnvSettings] Extension not found")
+    except Exception as _e3:
+        logger.warning(f"[EnvSettings] Install failed: {_e3}")
 
     # Auth: reject unauthenticated requests to non-public paths (fail-closed safety net)
     app.add_middleware(AuthMiddleware)
@@ -420,9 +429,6 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Stateless Runs API (stream/wait without a pre-existing thread)
     app.include_router(runs.router)
-
-    # Env Settings API is mounted at /api/env-settings
-    app.include_router(env_settings.router)
 
     @app.get("/health", tags=["health"])
     async def health_check() -> dict[str, str]:

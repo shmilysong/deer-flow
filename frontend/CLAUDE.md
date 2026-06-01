@@ -55,6 +55,9 @@ The frontend is a stateful chat application. Users create **threads** (conversat
   - `messages/` — Message processing and transformation
   - `mcp/` — Model Context Protocol integration
   - `models/` — TypeScript types and data models
+- **`extensions/`** — 零侵入扩展目录（独立于官方源码，不与上游冲突）：
+  - `env-settings/` — API Key 配置 UI（7 厂商通用管理、模型选择、Key 连通性验证、清除配置）
+  - `ads_auth/` — ADS 统一认证登录页
 - `hooks/` — Shared React hooks
 - **`lib/`** — Utilities (`cn()` from clsx + tailwind-merge)
 - **`core/settings-extensions/`** — SettingsDialog extension registry (`registry.ts` + `index.ts`)

@@ -17,6 +17,31 @@
 
 ---
 
+## 2026-06-01: API Keys 配置界面优化 — 后端
+
+### `deerflow_extensions/env_settings/` — 路由迁移（路由从 `app/gateway/routers/env_settings.py` 迁至扩展目录）
+
+**原因**: 零侵入原则——原本的 `env_settings.py` 在官方路由目录内，与上游源码混杂。
+
+**改动**:
+- **新建** `deerflow_extensions/env_settings/__init__.py` — 包文件
+- **新建** `deerflow_extensions/env_settings/router.py` — 完整多厂商路由（7 个厂商的 GET/PUT/DELETE/verify）
+- **新建** `deerflow_extensions/env_settings/startup.py` — `install_env_settings(app)` 注入函数
+- **删除** `backend/app/gateway/routers/env_settings.py` — 旧文件（已迁移）
+- **修改** `backend/app/gateway/app.py` — 删 import + include_router，加扩展注入块
+
+### 新增能力（与之前一致）
+
+- 支持 7 个国产大模型厂商管理：DeepSeek、Kimi、Doubao、Qwen、MiniMax、GLM、硅基流动
+- 服务商下拉选择器
+- 模型下拉选择（预置 + 自定义输入）
+- 自定义请求地址（可选）
+- Key 连通性验证
+- 一键清除厂商全部配置
+- `.env` 文件缺失时正常降级
+
+---
+
 ## 2. `backend/packages/harness/deerflow/agents/lead_agent/prompt.py`
 
 ```diff
