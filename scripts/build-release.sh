@@ -79,7 +79,7 @@ if [ ! -d "node_modules" ]; then
     pnpm install --frozen-lockfile
 fi
 
-SKIP_ENV_VALIDATION=1 pnpm build
+NEXT_CONFIG_BUILD_OUTPUT=standalone SKIP_ENV_VALIDATION=1 pnpm build
 
 echo "  复制前端构建产物（standalone 模式 = 无源码 + 无 node_modules）..."
 cp -r .next "$RELEASE_DIR/frontend/"

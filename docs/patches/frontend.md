@@ -234,7 +234,7 @@ import "@/core/env-settings/extension";
 **文件**: `frontend/src/components/workspace/settings/account-settings-page.tsx`
 **风险**: ✅ 极低（仅注释隐藏代码，不删除，恢复时删除注释块即可）
 
-### S4a — 隐藏 email/role 显示（L76-L98）
+### S4a — 隐藏 email/role 显示
 
 原代码显示 `user.email`（固定为 `admin@example.com`）和 `user.system_role`（固定为 `user`），均为 ADS 占位值。改为只显示从 email 前缀提取的 ADS 账号名。
 
@@ -253,11 +253,39 @@ import "@/core/env-settings/extension";
 </span>
 ```
 
-### S4b — 隐藏修改密码表单（L103-L148）
+### S4b — 隐藏修改密码表单
 
 ADS 密码由统一认证管理，DeerFlow 原生 change-password API 不可用。整个 `SettingsSection` 包裹在 JSX 注释块中。
 
+```typescript
+{/*
+// 🚫 修改密码表单被隐藏——原因：
+//    ADS 密码由统一认证管理，DeerFlow 原生 change-password API 不可用。
+// ==================================================================
+*/}
+<SettingsSection
+  title={t.settings.account.changePasswordTitle}
+  ...
+```
+
 **原因**: ADS 统一认证登录后，user.email 固定为 "admin@example.com"、system_role 为 "user"（占位值），原生修改密码 API 不可用。隐藏不正确的字段和不可用的功能。
+
+**验证命令**:
+```bash
+# 确认 email/role 被注释隐藏（输出不应显示 email/role 翻译 key）
+grep -c "t\.settings\.account\.email\|t\.settings\.account\.role" \
+  frontend/src/components/workspace/settings/account-settings-page.tsx
+# 应输出 0（已隐藏）
+
+# 确认"账号"行可见
+grep -c "账号" frontend/src/components/workspace/settings/account-settings-page.tsx
+# 应输出 1（从 email 前缀提取的账号名）
+
+# 确认修改密码表单被注释包裹
+grep -c "修改密码表单被隐藏" \
+  frontend/src/components/workspace/settings/account-settings-page.tsx
+# 应输出 1
+```
 
 **恢复方法**: 删除 `{/*` 注释开始标记和 `*/}` 注释结束标记之间的代码块，并删掉新加的"账号"行。
 

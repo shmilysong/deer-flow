@@ -110,6 +110,13 @@ grep -n "getSettingsExtensions" frontend/src/components/workspace/workspace-nav-
 echo "=== S3b: workspace-nav-menu.tsx EXTENSION IMPORT ==="
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/workspace-nav-menu.tsx
 
+# === account-settings-page 补丁 ===
+echo "=== S4a: account-settings-page email/role 已隐藏 ==="
+grep -c "t\.settings\.account\.email\|t\.settings\.account\.role" frontend/src/components/workspace/settings/account-settings-page.tsx
+
+echo "=== S4b: account-settings-page 修改密码已隐藏 ==="
+grep -c "修改密码表单被隐藏" frontend/src/components/workspace/settings/account-settings-page.tsx
+
 echo "=== B1: app.py env_settings ==="
 grep -n "env_settings" backend/app/gateway/app.py
 ```
