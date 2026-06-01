@@ -34,9 +34,6 @@ from deerflow.config.app_config import apply_logging_level
 AppConfig = deerflow_app_config.AppConfig
 get_app_config = deerflow_app_config.get_app_config
 
-AppConfig = deerflow_app_config.AppConfig
-get_app_config = deerflow_app_config.get_app_config
-
 # Default logging; lifespan overrides from config.yaml log_level.
 logging.basicConfig(
     level=logging.INFO,
@@ -346,7 +343,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     # Registers the ADS login router. Does NOT add middleware —
     # auth logic is inlined in AuthMiddleware itself.
     import sys as _sys2
-    _ext_path2 = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    _ext_path2 = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
     if _ext_path2 not in _sys2.path:
         _sys2.path.insert(0, _ext_path2)
     try:

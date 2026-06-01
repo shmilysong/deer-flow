@@ -14,6 +14,17 @@ const SSR_AUTH_TIMEOUT_MS = 5_000;
  */
 export async function getServerSideUser(): Promise<AuthResult> {
   if (process.env.NODE_ENV === "test" && process.env.DEER_FLOW_AUTH_DISABLED === "1") {
+    return {
+      tag: "authenticated",
+      user: {
+        id: "e2e-user",
+        email: "e2e@test.local",
+        system_role: "admin",
+        needs_setup: false,
+      },
+    };
+  }
+
   if (isStaticWebsiteOnly()) {
     return {
       tag: "authenticated",

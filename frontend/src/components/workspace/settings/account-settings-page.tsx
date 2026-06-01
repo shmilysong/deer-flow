@@ -83,7 +83,6 @@ export function AccountSettingsPage() {
             <span className="text-sm font-medium capitalize">
               {user?.system_role ?? "—"}
             </span>
-            */}
             <span className="text-muted-foreground text-sm">账号</span>
             <span className="text-sm font-medium">
               {user?.email ? user.email.replace(/@.*$/, "") : "—"}
@@ -129,7 +128,6 @@ export function AccountSettingsPage() {
           </Button>
         </form>
       </SettingsSection>
-      */}
 
       <SettingsSection title="" description="">
         <Button

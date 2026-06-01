@@ -2,7 +2,6 @@ import type { Message } from "@langchain/langgraph-sdk";
 import type { BaseStream } from "@langchain/langgraph-sdk/react";
 import { ChevronUpIcon, Loader2Icon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useCallback, useEffect, useRef } from "react";
 
 import {
   Conversation,
@@ -311,35 +310,6 @@ export function MessageList({
                       streamingMessages,
                     ),
                   )}
-              </div>
-            );
-        {groupMessages(messages, (group) => {
-          if (group.type === "human" || group.type === "assistant") {
-            return (
-              <div
-                key={group.id}
-                className={cn(
-                  "w-full",
-                  group.type === "assistant" && "group/assistant-turn",
-                )}
-              >
-                {group.messages.map((msg) => {
-                  return (
-                    <MessageListItem
-                      key={`${group.id}/${msg.id}`}
-                      message={msg}
-                      isLoading={thread.isLoading}
-                      threadId={threadId}
-                      showCopyButton={group.type !== "assistant"}
-                    />
-                  );
-                })}
-                {renderTokenUsage({
-                  messages: group.messages,
-                  turnUsageMessages,
-                })}
-                {group.type === "assistant" &&
-                  renderAssistantCopyButton(group.messages)}
               </div>
             );
           } else if (group.type === "assistant:clarification") {

@@ -87,7 +87,6 @@ export default function NewAgentPage() {
   const threadId = useMemo(() => uuid(), []);
 
   const { thread, sendMessage } = useThreadStream({
-    threadId: undefined,
     threadId: step === "chat" ? threadId : undefined,
     context: {
       mode: "flash",

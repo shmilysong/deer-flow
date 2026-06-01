@@ -169,10 +169,6 @@ export default function ChatPage() {
                 isHistoryLoading={isHistoryLoading}
                 tokenUsageInlineMode={tokenUsageInlineMode}
                 tokenUsageEnabled={tokenUsageEnabled}
-                hasMoreHistory={hasMoreHistory}
-                loadMoreHistory={loadMoreHistory}
-                isHistoryLoading={isHistoryLoading}
-                tokenUsageInlineMode={tokenUsageInlineMode}
               />
             </div>
             <div

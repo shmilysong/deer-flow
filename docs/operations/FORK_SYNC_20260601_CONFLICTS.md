@@ -71,3 +71,7 @@
 **Cherry-pick 内容**：无 ADS 认证相关配置，无额外 mock 路由
 
 **处理方式**：保留本地版本。本地已在 E2E 测试环境中配置 ADS 认证绕过（`DEER_FLOW_AUTH_DISABLED`），且 mock 路由覆盖了更多 API 端点。cherry-pick 结果是空提交，直接 `--skip`。
+
+### 提交 `848ace98` → `00a90bbd` — init_token 生命周期
+
+**说明**：`848ace98` 引入了 init_token 机制，但被后续的 `00a90bbd` 提交移除（refactor: Remove init_token handling）。两个提交均已成功 cherry-pick，最终 HEAD 与 `upstream/main` 均无 init_token，一致 ✅
