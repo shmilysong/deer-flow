@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from deerflow.config.runtime_paths import resolve_path
-from deerflow.config.skills_config import _default_repo_root
 from deerflow.skills.permissions import make_skill_written_path_sandbox_readable
 from deerflow.skills.storage.skill_storage import SKILL_MD_FILE, SkillStorage
 from deerflow.skills.types import SkillCategory
@@ -47,10 +46,6 @@ class LocalSkillStorage(SkillStorage):
             self._host_root: Path = config.skills.get_skills_path()
         else:
             self._host_root = resolve_path(host_path)
-            path = Path(host_path)
-            if not path.is_absolute():
-                path = _default_repo_root() / path
-            self._host_root = path.resolve()
 
     # ------------------------------------------------------------------
     # Abstract operation implementations

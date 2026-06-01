@@ -30,30 +30,6 @@ def test_build_self_update_section_present_for_custom_agent():
     assert "<self_update>" in section
     assert "my-agent" in section
     assert "update_agent" in section
-from deerflow.config.subagents_config import CustomSubagentConfig, SubagentsAppConfig
-from deerflow.skills.types import Skill, SkillCategory
-
-
-def _set_skills_cache_state(*, skills=None, active=False, version=0):
-    prompt_module._get_cached_skills_prompt_section.cache_clear()
-    with prompt_module._enabled_skills_lock:
-        prompt_module._enabled_skills_cache = skills
-        prompt_module._enabled_skills_by_config_cache.clear()
-        prompt_module._enabled_skills_refresh_active = active
-        prompt_module._enabled_skills_refresh_version = version
-        prompt_module._enabled_skills_refresh_event.clear()
-
-
-def test_build_self_update_section_empty_for_default_agent():
-    assert prompt_module._build_self_update_section(None) == ""
-
-
-def test_build_self_update_section_present_for_custom_agent():
-    section = prompt_module._build_self_update_section("my-agent")
-
-    assert "<self_update>" in section
-    assert "my-agent" in section
-    assert "update_agent" in section
 
 
 def test_build_custom_mounts_section_returns_empty_when_no_mounts(monkeypatch):
@@ -106,8 +82,6 @@ def test_apply_prompt_template_includes_custom_mounts(monkeypatch):
     monkeypatch.setattr(prompt_module, "get_deferred_tools_prompt_section", lambda **kwargs: "")
     monkeypatch.setattr(prompt_module, "_build_acp_section", lambda **kwargs: "")
     monkeypatch.setattr(prompt_module, "_get_memory_context", lambda agent_name=None, **kwargs: "")
-    monkeypatch.setattr(prompt_module, "_build_acp_section", lambda: "")
-    monkeypatch.setattr(prompt_module, "_get_memory_context", lambda agent_name=None: "")
     monkeypatch.setattr(prompt_module, "get_agent_soul", lambda agent_name=None: "")
 
     prompt = prompt_module.apply_prompt_template()
@@ -126,8 +100,6 @@ def test_apply_prompt_template_includes_relative_path_guidance(monkeypatch):
     monkeypatch.setattr(prompt_module, "get_deferred_tools_prompt_section", lambda **kwargs: "")
     monkeypatch.setattr(prompt_module, "_build_acp_section", lambda **kwargs: "")
     monkeypatch.setattr(prompt_module, "_get_memory_context", lambda agent_name=None, **kwargs: "")
-    monkeypatch.setattr(prompt_module, "_build_acp_section", lambda: "")
-    monkeypatch.setattr(prompt_module, "_get_memory_context", lambda agent_name=None: "")
     monkeypatch.setattr(prompt_module, "get_agent_soul", lambda agent_name=None: "")
 
     prompt = prompt_module.apply_prompt_template()
@@ -270,8 +242,6 @@ def test_refresh_skills_system_prompt_cache_async_reloads_immediately(monkeypatc
     state = {"skills": [make_skill("first-skill")]}
     monkeypatch.setattr(prompt_module, "get_or_new_skill_storage", lambda **kwargs: __import__("types").SimpleNamespace(load_skills=lambda *, enabled_only: list(state["skills"])))
     _set_skills_cache_state()
-    monkeypatch.setattr(prompt_module, "load_skills", lambda enabled_only=True: list(state["skills"]))
-    _set_skills_cache_state()
 
     try:
         prompt_module.warm_enabled_skills_cache()
@@ -335,7 +305,6 @@ def test_explicit_config_enabled_skills_are_cached_by_config_identity(monkeypatc
         assert load_count == 1
     finally:
         _set_skills_cache_state()
-        prompt_module.clear_skills_system_prompt_cache()
 
 
 def test_clear_cache_does_not_spawn_parallel_refresh_workers(monkeypatch, tmp_path):
@@ -378,8 +347,6 @@ def test_clear_cache_does_not_spawn_parallel_refresh_workers(monkeypatch, tmp_pa
 
     monkeypatch.setattr(prompt_module, "get_or_new_skill_storage", lambda **kwargs: __import__("types").SimpleNamespace(load_skills=lambda *, enabled_only: fake_load_skills(enabled_only=enabled_only)))
     _set_skills_cache_state()
-    monkeypatch.setattr(prompt_module, "load_skills", fake_load_skills)
-    _set_skills_cache_state()
 
     try:
         prompt_module.clear_skills_system_prompt_cache()
@@ -394,7 +361,6 @@ def test_clear_cache_does_not_spawn_parallel_refresh_workers(monkeypatch, tmp_pa
     finally:
         release.set()
         _set_skills_cache_state()
-        prompt_module.clear_skills_system_prompt_cache()
 
 
 def test_warm_enabled_skills_cache_logs_on_timeout(monkeypatch, caplog):

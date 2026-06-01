@@ -38,34 +38,6 @@ def _reset_config_singletons() -> None:
     reset_checkpointer()
     reset_store()
     reset_app_config()
-from deerflow.config.agents_api_config import get_agents_api_config
-from deerflow.config.app_config import AppConfig, get_app_config, reset_app_config
-from deerflow.config.checkpointer_config import get_checkpointer_config, load_checkpointer_config_from_dict
-from deerflow.config.guardrails_config import get_guardrails_config, load_guardrails_config_from_dict
-from deerflow.config.memory_config import get_memory_config, load_memory_config_from_dict
-from deerflow.config.stream_bridge_config import get_stream_bridge_config, load_stream_bridge_config_from_dict
-from deerflow.config.subagents_config import get_subagents_app_config, load_subagents_config_from_dict
-from deerflow.config.summarization_config import get_summarization_config, load_summarization_config_from_dict
-from deerflow.config.title_config import get_title_config, load_title_config_from_dict
-from deerflow.config.tool_search_config import get_tool_search_config, load_tool_search_config_from_dict
-from deerflow.runtime.checkpointer import get_checkpointer, reset_checkpointer
-from deerflow.runtime.store import get_store, reset_store
-
-
-def _reset_config_singletons() -> None:
-    load_title_config_from_dict({})
-    load_summarization_config_from_dict({})
-    load_memory_config_from_dict({})
-    load_agents_api_config_from_dict({})
-    load_subagents_config_from_dict({})
-    load_tool_search_config_from_dict({})
-    load_guardrails_config_from_dict({})
-    load_checkpointer_config_from_dict(None)
-    load_stream_bridge_config_from_dict(None)
-    load_acp_config_from_dict({})
-    reset_checkpointer()
-    reset_store()
-    reset_app_config()
 
 
 def _write_config(path: Path, *, model_name: str, supports_thinking: bool) -> None:

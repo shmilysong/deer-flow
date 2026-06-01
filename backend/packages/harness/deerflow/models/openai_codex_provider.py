@@ -375,7 +375,6 @@ class CodexChatModel(BaseChatModel):
 
         usage = response.get("usage", {})
         usage_metadata = _build_usage_metadata(usage) if usage else None
-        usage_metadata = _create_usage_metadata_responses(usage) if usage else None
         additional_kwargs = {}
         if reasoning_content:
             additional_kwargs["reasoning_content"] = reasoning_content

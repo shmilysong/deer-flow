@@ -523,9 +523,6 @@ class MemoryUpdater:
             model = self._get_model()
             response = model.invoke(prompt, config={"run_name": "memory_agent"})
             return self._finalize_update(
-            response = await model.ainvoke(prompt, config={"run_name": "memory_agent"})
-            return await asyncio.to_thread(
-                self._finalize_update,
                 current_memory=current_memory,
                 response_content=response.content,
                 thread_id=thread_id,

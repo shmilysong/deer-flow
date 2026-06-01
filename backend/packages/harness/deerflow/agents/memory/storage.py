@@ -124,10 +124,6 @@ class FileMemoryStorage(MemoryStorage):
         """Load memory data (cached with file modification time check)."""
         file_path = self._get_memory_file_path(agent_name, user_id=user_id)
         cache_key = self._cache_key(agent_name, user_id=user_id)
-    def load(self, agent_name: str | None = None, *, user_id: str | None = None) -> dict[str, Any]:
-        """Load memory data (cached with file modification time check)."""
-        file_path = self._get_memory_file_path(agent_name, user_id=user_id)
-        cache_key = self._cache_key(agent_name, user_id=user_id)
 
         try:
             current_mtime = file_path.stat().st_mtime if file_path.exists() else None
@@ -143,8 +139,6 @@ class FileMemoryStorage(MemoryStorage):
 
         with self._cache_lock:
             self._memory_cache[cache_key] = (memory_data, current_mtime)
-
-        return memory_data
 
         return memory_data
 

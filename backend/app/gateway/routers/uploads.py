@@ -6,7 +6,6 @@ import stat
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
-from pydantic import BaseModel
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_config
@@ -47,14 +46,6 @@ class UploadResponse(BaseModel):
     files: list[dict[str, str]]
     message: str
     skipped_files: list[str] = Field(default_factory=list)
-
-
-class UploadLimits(BaseModel):
-    """Application-level upload limits exposed to clients."""
-
-    max_files: int
-    max_file_size: int
-    max_total_size: int
 
 
 class UploadLimits(BaseModel):
@@ -152,19 +143,11 @@ async def _write_upload_file_with_limits(
     file: UploadFile,
     *,
     uploads_dir: os.PathLike[str] | str,
-async def _write_upload_file_streaming(
-    file: UploadFile,
-    *,
-    uploads_dir: os.PathLike[str] | str,
     display_filename: str,
     max_single_file_size: int,
     max_total_size: int,
     total_size: int,
 ) -> tuple[os.PathLike[str] | str, int, int]:
-    file_size = 0
-    file_path, fh = open_upload_file_no_symlink(uploads_dir, display_filename)
-    try:
-) -> tuple[int, int]:
     file_size = 0
     file_path, fh = open_upload_file_no_symlink(uploads_dir, display_filename)
     try:
@@ -186,8 +169,6 @@ async def _write_upload_file_streaming(
     else:
         fh.close()
     return file_path, file_size, total_size
-            output.write(chunk)
-    return file_size, total_size
 
 
 def _auto_convert_documents_enabled(app_config: AppConfig) -> bool:
@@ -259,11 +240,6 @@ async def upload_files(
 
         try:
             file_path, file_size, total_size = await _write_upload_file_with_limits(
-                file,
-                uploads_dir=uploads_dir,
-            file_path = uploads_dir / safe_filename
-            written_paths.append(file_path)
-            file_size, total_size = await _write_upload_file_streaming(
                 file,
                 uploads_dir=uploads_dir,
                 display_filename=safe_filename,

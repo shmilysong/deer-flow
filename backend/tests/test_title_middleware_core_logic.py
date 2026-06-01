@@ -144,7 +144,6 @@ class TestTitleMiddlewareCoreLogic:
             attach_tracing=False,
             app_config=app_config,
         )
-        assert model.ainvoke.await_args.kwargs["config"] == {"run_name": "title_agent"}
 
     def test_generate_title_normalizes_structured_message_content(self, monkeypatch):
         _set_test_title_config(max_chars=20)

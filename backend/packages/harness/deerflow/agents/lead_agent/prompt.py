@@ -154,33 +154,6 @@ def get_enabled_skills_for_config(app_config: AppConfig | None = None) -> list[S
 
 def _skill_mutability_label(category: SkillCategory | str) -> str:
     return "[custom, editable]" if category == SkillCategory.CUSTOM else "[built-in]"
-def _get_enabled_skills_for_config(app_config: AppConfig | None = None) -> list[Skill]:
-    """Return enabled skills using the caller's config source.
-
-    When a concrete ``app_config`` is supplied, cache the loaded skills by that
-    config object's identity so request-scoped config injection still resolves
-    skill paths from the matching config without rescanning storage on every
-    agent factory call.
-    """
-    if app_config is None:
-        return _get_enabled_skills()
-
-    cache_key = id(app_config)
-    with _enabled_skills_lock:
-        cached = _enabled_skills_by_config_cache.get(cache_key)
-        if cached is not None:
-            cached_config, cached_skills = cached
-            if cached_config is app_config:
-                return list(cached_skills)
-
-    skills = list(get_or_new_skill_storage(app_config=app_config).load_skills(enabled_only=True))
-    with _enabled_skills_lock:
-        _enabled_skills_by_config_cache[cache_key] = (app_config, skills)
-    return list(skills)
-
-
-def _skill_mutability_label(category: SkillCategory | str) -> str:
-    return "[custom, editable]" if category == SkillCategory.CUSTOM else "[built-in]"
 
 
 def clear_skills_system_prompt_cache() -> None:
@@ -208,7 +181,6 @@ Skip simple one-off tasks.
 
 
 def _build_available_subagents_description(available_names: list[str], bash_available: bool, *, app_config: AppConfig | None = None) -> str:
-def _build_available_subagents_description(available_names: list[str], bash_available: bool) -> str:
     """Dynamically build subagent type descriptions from registry.
 
     Mirrors Codex's pattern where agent_type_description is dynamically generated
@@ -231,7 +203,6 @@ def _build_available_subagents_description(available_names: list[str], bash_avai
             lines.append(f"- **{name}**: {builtin_descriptions[name]}")
         else:
             config = get_subagent_config(name, app_config=app_config)
-            config = get_subagent_config(name)
             if config is not None:
                 desc = config.description.split("\n")[0].strip()  # First line only for brevity
                 lines.append(f"- **{name}**: {desc}")
@@ -240,7 +211,6 @@ def _build_available_subagents_description(available_names: list[str], bash_avai
 
 
 def _build_subagent_section(max_concurrent: int, *, app_config: AppConfig | None = None) -> str:
-def _build_subagent_section(max_concurrent: int) -> str:
     """Build the subagent system prompt section with dynamic concurrency limit.
 
     Args:
@@ -251,13 +221,11 @@ def _build_subagent_section(max_concurrent: int) -> str:
     """
     n = max_concurrent
     available_names = get_available_subagent_names(app_config=app_config) if app_config is not None else get_available_subagent_names()
-    available_names = get_available_subagent_names()
     bash_available = "bash" in available_names
 
     # Dynamically build subagent type descriptions from registry (aligned with Codex's
     # agent_type_description pattern where all registered roles are listed in the tool spec).
     available_subagents = _build_available_subagents_description(available_names, bash_available, app_config=app_config)
-    available_subagents = _build_available_subagents_description(available_names, bash_available)
     direct_tool_examples = "bash, ls, read_file, web_search, etc." if bash_available else "ls, read_file, web_search, etc."
     direct_execution_example = (
         '# User asks: "Run the tests"\n# Thinking: Cannot decompose into parallel sub-tasks\n# → Execute directly\n\nbash("npm test")  # Direct execution, not task()'
@@ -604,17 +572,6 @@ def _get_memory_context(agent_name: str | None = None, *, app_config: AppConfig 
             config = get_memory_config()
         else:
             config = app_config.memory
-        from deerflow.config.memory_config import get_memory_config
-        from deerflow.runtime.user_context import get_effective_user_id
-
-        from deerflow.runtime.user_context import get_effective_user_id
-
-        if app_config is None:
-            from deerflow.config.memory_config import get_memory_config
-
-            config = get_memory_config()
-        else:
-            config = app_config.memory
 
         if not config.enabled or not config.injection_enabled:
             return ""
@@ -669,7 +626,6 @@ You have access to skills that provide optimized workflows for specific tasks. E
 def get_skills_prompt_section(available_skills: set[str] | None = None, *, app_config: AppConfig | None = None) -> str:
     """Generate the skills prompt section with available skills list."""
     skills = get_enabled_skills_for_config(app_config)
-    skills = _get_enabled_skills_for_config(app_config)
 
     if app_config is None:
         try:
@@ -683,7 +639,6 @@ def get_skills_prompt_section(available_skills: set[str] | None = None, *, app_c
             skill_evolution_enabled = False
     else:
         config = app_config
-        config = app_config or get_app_config()
         container_base_path = config.skills.container_path
         skill_evolution_enabled = config.skill_evolution.enabled
 
@@ -744,8 +699,6 @@ def get_deferred_tools_prompt_section(*, app_config: AppConfig | None = None) ->
 
             config = get_app_config()
         except Exception:
-        config = app_config or get_app_config()
-        if not config.tool_search.enabled:
             return ""
     else:
         config = app_config
@@ -799,11 +752,6 @@ def _build_custom_mounts_section(*, app_config: AppConfig | None = None) -> str:
         config = app_config
 
     mounts = config.sandbox.mounts or []
-        config = app_config or get_app_config()
-        mounts = config.sandbox.mounts or []
-    except Exception:
-        logger.exception("Failed to load configured sandbox mounts for the lead-agent prompt")
-        return ""
 
     if not mounts:
         return ""
@@ -855,7 +803,6 @@ def apply_prompt_template(
 
     # Build ACP agent section only if ACP agents are configured
     acp_section = _build_acp_section(app_config=app_config)
-    acp_section = _build_acp_section()
     custom_mounts_section = _build_custom_mounts_section(app_config=app_config)
     acp_and_mounts_section = "\n".join(section for section in (acp_section, custom_mounts_section) if section)
 

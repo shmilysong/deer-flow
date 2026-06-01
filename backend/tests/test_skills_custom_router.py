@@ -74,7 +74,6 @@ def test_install_skill_archive_runs_security_scan(monkeypatch, tmp_path):
     refresh_calls = []
 
     async def _scan(content, *, executable, location, app_config=None):
-    async def _scan(content, *, executable, location):
         from deerflow.skills.security_scanner import ScanResult
 
         scan_calls.append({"content": content, "executable": executable, "location": location})
@@ -92,12 +91,6 @@ def test_install_skill_archive_runs_security_scan(monkeypatch, tmp_path):
         skills=SimpleNamespace(get_skills_path=lambda: skills_root, container_path="/mnt/skills", use="deerflow.skills.storage.local_skill_storage:LocalSkillStorage"),
         skill_evolution=SimpleNamespace(enabled=True, moderation_model_name=None),
     )
-    monkeypatch.setattr(skills_router, "resolve_thread_virtual_path", lambda thread_id, path: archive)
-    monkeypatch.setattr(skills_router, "get_or_new_skill_storage", lambda **kw: storage)
-    monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
-    monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
-
-    app = _make_test_app(config)
     monkeypatch.setattr(skills_router, "resolve_thread_virtual_path", lambda thread_id, path: archive)
     monkeypatch.setattr(skills_router, "get_or_new_skill_storage", lambda **kw: storage)
     monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
@@ -209,12 +202,6 @@ def test_install_skill_archive_security_scan_block_returns_400(monkeypatch, tmp_
     monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
 
     app = _make_test_app(config)
-    monkeypatch.setattr(skills_router, "resolve_thread_virtual_path", lambda thread_id, path: archive)
-    monkeypatch.setattr(skills_router, "get_or_new_skill_storage", lambda **kw: storage)
-    monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
-    monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
-
-    app = _make_test_app(config)
 
     with TestClient(app) as client:
         response = client.post("/api/skills/install", json={"thread_id": "thread-1", "path": "mnt/user-data/outputs/blocked-skill.skill"})
@@ -288,8 +275,6 @@ def test_custom_skill_rollback_blocked_by_scanner(monkeypatch, tmp_path):
     history_file = get_or_new_skill_storage(app_config=config).get_skill_history_file("demo-skill")
     history_file.parent.mkdir(parents=True, exist_ok=True)
     history_file.write_text(
-    monkeypatch.setattr("deerflow.skills.manager.get_app_config", lambda: config)
-    get_skill_history_file("demo-skill", app_config=config).write_text(
         '{"action":"human_edit","prev_content":' + json.dumps(original_content) + ',"new_content":' + json.dumps(edited_content) + "}\n",
         encoding="utf-8",
     )

@@ -490,7 +490,6 @@ def test_task_tool_runtime_none_passes_groups_none(monkeypatch):
     monkeypatch.setattr("deerflow.tools.get_available_tools", get_available_tools)
     fallback_app_config = SimpleNamespace(models=[SimpleNamespace(name="default-model")])
     monkeypatch.setattr(task_tool_module, "get_app_config", lambda: fallback_app_config)
-    monkeypatch.setattr(task_tool_module, "get_app_config", lambda: SimpleNamespace(models=[SimpleNamespace(name="default-model")]))
 
     output = _run_task_tool(
         runtime=None,
@@ -508,9 +507,6 @@ def test_task_tool_runtime_none_passes_groups_none(monkeypatch):
         subagent_enabled=False,
         app_config=fallback_app_config,
     )
-    # runtime is None → metadata is empty dict → groups=None
-    get_available_tools.assert_called_once_with(model_name=None, groups=None, subagent_enabled=False)
-    get_available_tools.assert_called_once_with(model_name="default-model", groups=None, subagent_enabled=False)
 
     config = _make_subagent_config()
     events = []

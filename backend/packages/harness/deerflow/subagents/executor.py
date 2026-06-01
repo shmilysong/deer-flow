@@ -234,20 +234,6 @@ def _submit_to_isolated_loop_in_context(
             _get_isolated_subagent_loop(),
         )
     )
-        return _isolated_subagent_loop
-
-
-def _submit_to_isolated_loop_in_context(
-    context: Context,
-    coro_factory: Callable[[], Coroutine[Any, Any, SubagentResult]],
-) -> Future[SubagentResult]:
-    """Submit a coroutine to the isolated loop while preserving ContextVar state."""
-    return context.run(
-        lambda: asyncio.run_coroutine_threadsafe(
-            coro_factory(),
-            _get_isolated_subagent_loop(),
-        )
-    )
 
 
 def _filter_tools(
@@ -302,9 +288,6 @@ class SubagentExecutor:
             app_config: Resolved AppConfig. When None, ``_create_agent`` falls
                 back to ``get_app_config()`` (matches the lead-agent factory's
                 pattern).
-            app_config: Resolved AppConfig; threaded into middleware factories
-                at agent-build time. When None, ``_create_agent`` falls back to
-                ``get_app_config()`` (matches the lead-agent factory's pattern).
             parent_model: The parent agent's model name for inheritance.
             sandbox_state: Sandbox state from parent agent.
             thread_data: Thread data from parent agent.
@@ -347,18 +330,6 @@ class SubagentExecutor:
 
         # Reuse shared middleware composition with lead agent.
         middlewares = build_subagent_runtime_middlewares(app_config=app_config, model_name=self.model_name, lazy_init=True)
-        # Mirror lead-agent factory pattern: prefer explicit app_config,
-        # fall back to ambient lookup at agent-build time.
-        from deerflow.config import get_app_config
-
-        resolved_app_config = self.app_config or get_app_config()
-        model_name = _get_model_name(self.config, self.parent_model)
-        model = create_chat_model(name=model_name, thinking_enabled=False, app_config=resolved_app_config)
-
-        from deerflow.agents.middlewares.tool_error_handling_middleware import build_subagent_runtime_middlewares
-
-        # Reuse shared middleware composition with lead agent.
-        middlewares = build_subagent_runtime_middlewares(app_config=app_config, model_name=self.model_name, lazy_init=True)
 
         # system_prompt is included in initial state messages (see _build_initial_state)
         # to avoid multiple SystemMessages which some LLM APIs don't support.
@@ -372,50 +343,6 @@ class SubagentExecutor:
 
     async def _load_skills(self) -> list[Skill]:
         """Load enabled skill metadata based on config.skills."""
-        if self.config.skills is not None and len(self.config.skills) == 0:
-            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} skills=[] — skipping skill loading")
-            return []
-
-        try:
-            from deerflow.skills.storage import get_or_new_skill_storage
-
-            storage_kwargs = {"app_config": self.app_config} if self.app_config is not None else {}
-            storage = await asyncio.to_thread(get_or_new_skill_storage, **storage_kwargs)
-            # Use asyncio.to_thread to avoid blocking the event loop (LangGraph ASGI requirement)
-            all_skills = await asyncio.to_thread(storage.load_skills, enabled_only=True)
-            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} loaded {len(all_skills)} enabled skills from disk")
-        except Exception:
-            logger.exception(f"[trace={self.trace_id}] Failed to load skills for subagent {self.config.name}")
-            raise
-
-        if not all_skills:
-            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} no enabled skills found")
-            return []
-
-        # Filter by config.skills whitelist
-        if self.config.skills is not None:
-            allowed = set(self.config.skills)
-            return [s for s in all_skills if s.name in allowed]
-        return all_skills
-
-    def _apply_skill_allowed_tools(self, skills: list[Skill]) -> list[BaseTool]:
-        return filter_tools_by_skill_allowed_tools(self._base_tools, skills)
-
-    async def _load_skill_messages(self, skills: list[Skill]) -> list[SystemMessage]:
-    async def _load_skill_messages(self) -> list[SystemMessage]:
-        """Load skill content as conversation items based on config.skills.
-
-        Aligned with Codex's pattern: each subagent loads its own skills
-        per-session and injects them as conversation items (developer messages),
-        not as system prompt text. The config.skills whitelist controls which
-        skills are loaded:
-        - None: load all enabled skills
-        - []: no skills
-        - ["skill-a", "skill-b"]: only these skills
-
-        Returns:
-            List of SystemMessages containing skill content.
-        """
         if self.config.skills is not None and len(self.config.skills) == 0:
             logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} skills=[] — skipping skill loading")
             return []
@@ -477,7 +404,6 @@ class SubagentExecutor:
         return messages
 
     async def _build_initial_state(self, task: str) -> tuple[dict[str, Any], list[BaseTool]]:
-    async def _build_initial_state(self, task: str) -> dict[str, Any]:
         """Build the initial state for agent execution.
 
         Args:
@@ -502,11 +428,6 @@ class SubagentExecutor:
             system_parts.append(skill_msg.content)
 
         messages: list[Any] = []
-        skill_messages = await self._load_skill_messages()
-
-        messages: list[Any] = []
-        # Skill content injected as developer/system messages before the task
-        messages.extend(skill_messages)
         if system_parts:
             messages.append(SystemMessage(content="\n\n".join(system_parts)))
 
@@ -556,8 +477,6 @@ class SubagentExecutor:
         try:
             state, filtered_tools = await self._build_initial_state(task)
             agent = self._create_agent(filtered_tools)
-            agent = self._create_agent()
-            state = await self._build_initial_state(task)
 
             # Token collector for subagent LLM calls
             collector_caller = f"subagent:{self.config.name}"
@@ -737,10 +656,6 @@ class SubagentExecutor:
             future = _submit_to_isolated_loop_in_context(
                 parent_context,
                 lambda: self._aexecute(task, result_holder),
-        try:
-            future = _submit_to_isolated_loop_in_context(
-                parent_context,
-                lambda: self._aexecute(task, result_holder),
             )
             return future.result(timeout=self.config.timeout_seconds)
         except FuturesTimeoutError:
@@ -847,9 +762,6 @@ class SubagentExecutor:
                 execution_future = _submit_to_isolated_loop_in_context(
                     parent_context,
                     lambda: self._aexecute(task, result_holder),
-                execution_future = asyncio.run_coroutine_threadsafe(
-                    self._aexecute(task, result_holder),
-                    _get_isolated_subagent_loop(),
                 )
                 try:
                     # Wait for execution with timeout

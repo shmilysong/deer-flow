@@ -25,7 +25,6 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from langgraph.checkpoint.base import empty_checkpoint
-from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from langchain_core.messages import HumanMessage
@@ -52,7 +51,6 @@ def _build_runtime_context(
     caller_context: Any | None,
     app_config: AppConfig | None = None,
 ) -> dict[str, Any]:
-def _build_runtime_context(thread_id: str, run_id: str, caller_context: Any | None) -> dict[str, Any]:
     """Build the dict that becomes ``ToolRuntime.context`` for the run.
 
     Always includes ``thread_id`` and ``run_id``. Additional keys from the caller's
@@ -60,7 +58,6 @@ def _build_runtime_context(thread_id: str, run_id: str, caller_context: Any | No
     are merged in but never override ``thread_id``/``run_id``. The resolved
     ``AppConfig`` is added by the worker so tools can consume it without ambient
     global lookups.
-    are merged in but never override ``thread_id``/``run_id``.
 
     langgraph 1.1+ surfaces this as ``runtime.context`` via the parent runtime stored
     under ``config['configurable']['__pregel_runtime']`` — see
@@ -157,37 +154,6 @@ async def run_agent(
 
     journal = None
 
-    journal = None
-
-    # Initialize RunJournal for event capture
-    journal = None
-    if event_store is not None:
-        from deerflow.runtime.journal import RunJournal
-
-        journal = RunJournal(
-            run_id=run_id,
-            thread_id=thread_id,
-            event_store=event_store,
-            track_token_usage=getattr(run_events_config, "track_token_usage", True),
-        )
-
-        # Write human_message event (model_dump format, aligned with checkpoint)
-        human_msg = _extract_human_message(graph_input)
-        if human_msg is not None:
-            msg_metadata = {}
-            if follow_up_to_run_id:
-                msg_metadata["follow_up_to_run_id"] = follow_up_to_run_id
-            await event_store.put(
-                thread_id=thread_id,
-                run_id=run_id,
-                event_type="human_message",
-                category="message",
-                content=human_msg.model_dump(),
-                metadata=msg_metadata or None,
-            )
-            content = human_msg.content
-            journal.set_first_human_message(content if isinstance(content, str) else str(content))
-
     # Track whether "events" was requested but skipped
     if "events" in requested_modes:
         logger.info(
@@ -261,17 +227,6 @@ async def run_agent(
             runtime_ctx["__run_journal"] = journal
         _install_runtime_context(config, runtime_ctx)
         runtime = Runtime(context=cast(Any, runtime_ctx), store=store)
-        # Inject runtime context so middlewares can access thread_id
-        # (langgraph-cli does this automatically; we must do it manually)
-        runtime = Runtime(context={"thread_id": thread_id, "run_id": run_id}, store=store)
-        # If the caller already set a ``context`` key (LangGraph >= 0.6.0
-        # prefers it over ``configurable`` for thread-level data), make
-        # sure ``thread_id`` is available there too.
-        runtime_ctx = _build_runtime_context(thread_id, run_id, config.get("context"))
-        if "context" in config and isinstance(config["context"], dict):
-            config["context"].setdefault("thread_id", thread_id)
-            config["context"].setdefault("run_id", run_id)
-        runtime = Runtime(context=runtime_ctx, store=store)
         config.setdefault("configurable", {})["__pregel_runtime"] = runtime
 
         # Inject RunJournal as a LangChain callback handler.

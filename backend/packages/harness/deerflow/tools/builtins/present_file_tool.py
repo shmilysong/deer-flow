@@ -69,7 +69,6 @@ def _normalize_presented_filepath(
             actual_path = get_paths().resolve_virtual_path(thread_id, filepath, user_id=get_effective_user_id())
         except TypeError:
             actual_path = get_paths().resolve_virtual_path(thread_id, filepath)
-        actual_path = get_paths().resolve_virtual_path(thread_id, filepath, user_id=get_effective_user_id())
     else:
         actual_path = Path(filepath).expanduser().resolve()
 

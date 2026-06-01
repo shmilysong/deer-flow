@@ -14,10 +14,6 @@ from deerflow.config.app_config import AppConfig, CircuitBreakerConfig
 from deerflow.config.guardrails_config import GuardrailsConfig
 from deerflow.config.model_config import ModelConfig
 from deerflow.config.sandbox_config import SandboxConfig
-from deerflow.config.app_config import AppConfig, CircuitBreakerConfig
-from deerflow.config.guardrails_config import GuardrailsConfig
-from deerflow.config.model_config import ModelConfig
-from deerflow.config.sandbox_config import SandboxConfig
 
 
 def _request(name: str = "web_search", tool_call_id: str | None = "tc-1"):
@@ -25,71 +21,6 @@ def _request(name: str = "web_search", tool_call_id: str | None = "tc-1"):
     if tool_call_id is not None:
         tool_call["id"] = tool_call_id
     return SimpleNamespace(tool_call=tool_call)
-
-
-def _module(name: str, **attrs):
-    module = ModuleType(name)
-    for key, value in attrs.items():
-        setattr(module, key, value)
-    return module
-
-
-def _make_app_config(*, supports_vision: bool = False) -> AppConfig:
-    return AppConfig(
-        models=[
-            ModelConfig(
-                name="test-model",
-                display_name="test-model",
-                description=None,
-                use="langchain_openai:ChatOpenAI",
-                model="test-model",
-                supports_vision=supports_vision,
-            )
-        ],
-        sandbox=SandboxConfig(use="test"),
-        guardrails=GuardrailsConfig(enabled=False),
-        circuit_breaker=CircuitBreakerConfig(failure_threshold=7, recovery_timeout_sec=11),
-    )
-
-
-def _stub_runtime_middleware_imports(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeMiddleware:
-        def __init__(self, *args, **kwargs):
-            self.args = args
-            self.kwargs = kwargs
-
-    class FakeLLMErrorHandlingMiddleware:
-        def __init__(self, *, app_config):
-            self.app_config = app_config
-
-    monkeypatch.setitem(
-        sys.modules,
-        "deerflow.agents.middlewares.llm_error_handling_middleware",
-        _module(
-            "deerflow.agents.middlewares.llm_error_handling_middleware",
-            LLMErrorHandlingMiddleware=FakeLLMErrorHandlingMiddleware,
-        ),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "deerflow.agents.middlewares.thread_data_middleware",
-        _module("deerflow.agents.middlewares.thread_data_middleware", ThreadDataMiddleware=FakeMiddleware),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "deerflow.sandbox.middleware",
-        _module("deerflow.sandbox.middleware", SandboxMiddleware=FakeMiddleware),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "deerflow.agents.middlewares.dangling_tool_call_middleware",
-        _module("deerflow.agents.middlewares.dangling_tool_call_middleware", DanglingToolCallMiddleware=FakeMiddleware),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "deerflow.agents.middlewares.sandbox_audit_middleware",
-        _module("deerflow.agents.middlewares.sandbox_audit_middleware", SandboxAuditMiddleware=FakeMiddleware),
-    )
 
 
 def _module(name: str, **attrs):

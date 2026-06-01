@@ -5,12 +5,6 @@ from unittest.mock import patch
 
 import pytest
 
-import pytest
-from pathlib import Path
-from unittest.mock import patch
-
-import pytest
-
 from deerflow.agents.memory.storage import FileMemoryStorage, create_empty_memory
 
 
@@ -75,9 +69,6 @@ class TestUserIsolatedStorage:
     def test_no_user_id_uses_legacy_path(self, base_dir: Path):
         from deerflow.config.memory_config import MemoryConfig
         from deerflow.config.paths import Paths
-        from deerflow.config.paths import Paths
-        from deerflow.config.memory_config import MemoryConfig
-        from deerflow.config.paths import Paths
 
         paths = Paths(base_dir)
         with patch("deerflow.agents.memory.storage.get_paths", return_value=paths):
@@ -90,9 +81,6 @@ class TestUserIsolatedStorage:
 
     def test_user_and_legacy_do_not_interfere(self, base_dir: Path):
         """user_id=None (legacy) and user_id='alice' must use different files and caches."""
-        from deerflow.config.memory_config import MemoryConfig
-        from deerflow.config.paths import Paths
-        from deerflow.config.paths import Paths
         from deerflow.config.memory_config import MemoryConfig
         from deerflow.config.paths import Paths
 

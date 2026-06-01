@@ -296,20 +296,6 @@ async def task_tool(
     if resolved_app_config is not None:
         available_tools_kwargs["app_config"] = resolved_app_config
     tools = get_available_tools(**available_tools_kwargs)
-    app_config = None
-    if config.model == "inherit" and parent_model is None:
-        app_config = get_app_config()
-    effective_model = resolve_subagent_model_name(config, parent_model, app_config=app_config)
-
-    # Subagents should not have subagent tools enabled (prevent recursive nesting)
-    available_tools_kwargs = {
-        "model_name": effective_model,
-        "groups": parent_tool_groups,
-        "subagent_enabled": False,
-    }
-    if resolved_app_config is not None:
-        available_tools_kwargs["app_config"] = resolved_app_config
-    tools = get_available_tools(**available_tools_kwargs)
 
     # Create executor
     executor_kwargs = {
@@ -324,16 +310,6 @@ async def task_tool(
     if resolved_app_config is not None:
         executor_kwargs["app_config"] = resolved_app_config
     executor = SubagentExecutor(**executor_kwargs)
-    executor = SubagentExecutor(
-        config=config,
-        tools=tools,
-        app_config=app_config,
-        parent_model=parent_model,
-        sandbox_state=sandbox_state,
-        thread_data=thread_data,
-        thread_id=thread_id,
-        trace_id=trace_id,
-    )
 
     # Start background execution (always async to prevent blocking)
     # Use tool_call_id as task_id for better traceability

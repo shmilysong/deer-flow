@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-from __future__ import annotations
-
-from unittest.mock import AsyncMock, MagicMock
-
 from _router_auth_helpers import make_authed_test_app
 from fastapi.testclient import TestClient
 
@@ -118,7 +114,6 @@ def test_run_messages_passes_after_seq_to_event_store():
     event_store.list_messages_by_run.assert_awaited_once_with(
         "thread-3",
         "run-3",
-        "thread-3", "run-3",
         limit=51,  # default limit(50) + 1
         before_seq=None,
         after_seq=5,
@@ -140,7 +135,6 @@ def test_run_messages_respects_custom_limit():
     event_store.list_messages_by_run.assert_awaited_once_with(
         "thread-4",
         "run-4",
-        "thread-4", "run-4",
         limit=11,  # 10 + 1
         before_seq=None,
         after_seq=None,
@@ -162,7 +156,6 @@ def test_run_messages_passes_before_seq_to_event_store():
     event_store.list_messages_by_run.assert_awaited_once_with(
         "thread-5",
         "run-5",
-        "thread-5", "run-5",
         limit=51,
         before_seq=10,
         after_seq=None,

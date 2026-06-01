@@ -34,22 +34,6 @@ def test_get_skills_root_path_honors_env_override(tmp_path: Path, monkeypatch):
     app_config = SimpleNamespace(skills=SkillsConfig())
     path = get_or_new_skill_storage(app_config=app_config).get_skills_root_path()
     assert path == skills_root
-def test_get_skills_root_path_points_to_project_root_skills():
-    """get_skills_root_path() should point to deer-flow/skills (sibling of backend/), not backend/packages/skills."""
-
-    app_config = SimpleNamespace(skills=SkillsConfig())
-    path = get_or_new_skill_storage(app_config=app_config).get_skills_root_path()
-    assert path == tmp_path / "skills"
-
-
-def test_get_skills_root_path_honors_env_override(tmp_path: Path, monkeypatch):
-    """DEER_FLOW_SKILLS_PATH should override the caller project skills directory."""
-    skills_root = tmp_path / "team-skills"
-    monkeypatch.setenv("DEER_FLOW_SKILLS_PATH", str(skills_root))
-
-    app_config = SimpleNamespace(skills=SkillsConfig())
-    path = get_or_new_skill_storage(app_config=app_config).get_skills_root_path()
-    assert path == skills_root
 
 
 def test_load_skills_discovers_nested_skills_and_sets_container_paths(tmp_path: Path):

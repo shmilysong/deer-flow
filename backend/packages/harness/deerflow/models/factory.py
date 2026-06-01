@@ -47,8 +47,6 @@ def _enable_stream_usage_by_default(model_use_path: str, model_settings_from_con
         model_settings_from_config["stream_usage"] = True
 
 
-def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *, app_config: AppConfig | None = None, **kwargs) -> BaseChatModel:
-def create_chat_model(name: str | None = None, thinking_enabled: bool = False, **kwargs) -> BaseChatModel:
 def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *, app_config: AppConfig | None = None, attach_tracing: bool = True, **kwargs) -> BaseChatModel:
     """Create a chat model instance from the config.
 
@@ -163,7 +161,6 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             model_settings_from_config["stream_usage"] = True
 
     model_instance = model_class(**kwargs, **model_settings_from_config)
-    model_instance = model_class(**{**model_settings_from_config, **kwargs})
 
     if attach_tracing:
         callbacks = build_tracing_callbacks()

@@ -92,7 +92,6 @@ class TestFixMessages:
         assert "<tool_call>" in out.content
         assert "<function=get_weather>" in out.content
         assert "<parameter=city>London</parameter>" in out.content
-        assert '<parameter=city>"London"</parameter>' in out.content
         assert not getattr(out, "tool_calls", [])
 
     def test_ai_message_text_preserved_before_xml(self):

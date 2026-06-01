@@ -288,56 +288,6 @@ def test_make_lead_agent_reads_runtime_options_from_context(monkeypatch):
     assert result["model"] is not None
 
 
-def test_make_lead_agent_reads_runtime_options_from_context(monkeypatch):
-    app_config = _make_app_config(
-        [
-            _make_model("default-model", supports_thinking=False),
-            _make_model("context-model", supports_thinking=True),
-        ]
-    )
-
-    import deerflow.tools as tools_module
-
-    get_available_tools = MagicMock(return_value=[])
-    monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
-    monkeypatch.setattr(tools_module, "get_available_tools", get_available_tools)
-    monkeypatch.setattr(lead_agent_module, "_build_middlewares", lambda config, model_name, agent_name=None, **kwargs: [])
-
-    captured: dict[str, object] = {}
-
-    def _fake_create_chat_model(*, name, thinking_enabled, reasoning_effort=None, app_config=None):
-        captured["name"] = name
-        captured["thinking_enabled"] = thinking_enabled
-        captured["reasoning_effort"] = reasoning_effort
-        captured["app_config"] = app_config
-        return object()
-
-    monkeypatch.setattr(lead_agent_module, "create_chat_model", _fake_create_chat_model)
-    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
-
-    result = lead_agent_module.make_lead_agent(
-        {
-            "context": {
-                "model_name": "context-model",
-                "thinking_enabled": False,
-                "reasoning_effort": "high",
-                "is_plan_mode": True,
-                "subagent_enabled": True,
-                "max_concurrent_subagents": 7,
-            }
-        }
-    )
-
-    assert captured == {
-        "name": "context-model",
-        "thinking_enabled": False,
-        "reasoning_effort": "high",
-        "app_config": app_config,
-    }
-    get_available_tools.assert_called_once_with(model_name="context-model", groups=None, subagent_enabled=True, app_config=app_config)
-    assert result["model"] is not None
-
-
 def test_make_lead_agent_rejects_invalid_bootstrap_agent_name(monkeypatch):
     app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
 
@@ -493,40 +443,6 @@ def test_build_middlewares_omits_loop_detection_when_disabled(monkeypatch):
 
 
 def test_create_summarization_middleware_uses_configured_model_alias(monkeypatch):
-    monkeypatch.setattr(
-        lead_agent_module,
-        "build_lead_runtime_middlewares",
-        _fake_build_lead_runtime_middlewares,
-    )
-    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda **kwargs: None)
-    monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
-    monkeypatch.setattr(
-        lead_agent_module,
-        "TitleMiddleware",
-        lambda *, app_config: captured.setdefault("title_app_config", app_config) or "title-middleware",
-    )
-    monkeypatch.setattr(
-        lead_agent_module,
-        "MemoryMiddleware",
-        lambda agent_name=None, *, memory_config: captured.setdefault("memory_config", memory_config) or "memory-middleware",
-    )
-
-    middlewares = lead_agent_module._build_middlewares(
-        {"configurable": {"is_plan_mode": False, "subagent_enabled": False}},
-        model_name="safe-model",
-        app_config=app_config,
-    )
-
-    assert captured == {
-        "app_config": app_config,
-        "lazy_init": True,
-        "title_app_config": app_config,
-        "memory_config": app_config.memory,
-    }
-    assert middlewares[0] == "base-middleware"
-
-
-def test_create_summarization_middleware_uses_configured_model_alias(monkeypatch):
     app_config = _make_app_config([_make_model("model-masswork", supports_thinking=False)])
     app_config.summarization = SummarizationConfig(enabled=True, model_name="model-masswork")
     app_config.memory = MemoryConfig(enabled=False)
@@ -552,11 +468,6 @@ def test_create_summarization_middleware_uses_configured_model_alias(monkeypatch
     monkeypatch.setattr(lead_agent_module, "DeerFlowSummarizationMiddleware", lambda **kwargs: kwargs)
 
     middleware = lead_agent_module._create_summarization_middleware(app_config=app_config)
-
-    assert captured["name"] == "model-masswork"
-    assert captured["thinking_enabled"] is False
-    assert captured["app_config"] is app_config
-    middleware = lead_agent_module._create_summarization_middleware(app_config=_make_app_config([_make_model("model-masswork", supports_thinking=False)]))
 
     assert captured["name"] == "model-masswork"
     assert captured["thinking_enabled"] is False
@@ -619,28 +530,3 @@ def test_memory_middleware_uses_explicit_memory_config_without_global_read(monke
     middleware = MemoryMiddleware(memory_config=MemoryConfig(enabled=False))
 
     assert middleware.after_agent({"messages": []}, runtime=MagicMock(context={"thread_id": "thread-1"})) is None
-    assert captured["before_summarization"] == [lead_agent_module.memory_flush_hook]
-
-
-def test_create_summarization_middleware_passes_skill_read_tool_names(monkeypatch):
-    app_config = _make_app_config([_make_model("default-model", supports_thinking=False)])
-    monkeypatch.setattr(
-        lead_agent_module,
-        "get_summarization_config",
-        lambda: SummarizationConfig(enabled=True, skill_file_read_tool_names=["read_file", "cat"]),
-    )
-    monkeypatch.setattr(lead_agent_module, "get_memory_config", lambda: MemoryConfig(enabled=False))
-    monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
-    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
-
-    captured: dict[str, object] = {}
-
-    def _fake_middleware(**kwargs):
-        captured.update(kwargs)
-        return kwargs
-
-    monkeypatch.setattr(lead_agent_module, "DeerFlowSummarizationMiddleware", _fake_middleware)
-
-    lead_agent_module._create_summarization_middleware()
-
-    assert captured["skill_file_read_tool_names"] == ["read_file", "cat"]

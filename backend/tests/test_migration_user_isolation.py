@@ -4,10 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-import json
-from pathlib import Path
-
-import pytest
 
 from deerflow.config.paths import Paths
 
@@ -194,4 +190,3 @@ class TestMigrateAgents:
 
         report = migrate_agents(paths, user_id="default")
         assert report == []
-        migrate_memory(paths, user_id="default")  # should not raise
