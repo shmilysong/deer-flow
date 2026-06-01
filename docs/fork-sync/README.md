@@ -107,7 +107,7 @@ grep -c "deerflow_extensions" docker/docker-compose-dev.yaml
 grep -c "training_logs" docker/docker-compose.yaml
 ```
 
-### Step 6: 修复构建错误
+### Step 6: 修复构建错误 + 合并残留扫描
 
 ```bash
 # 后端语法检查
@@ -120,6 +120,28 @@ for f in backend/packages/harness/deerflow/tools/builtins/task_tool.py \
          backend/packages/harness/deerflow/models/factory.py; do
     echo "$f: app_config=$(grep -c 'app_config' "$f")"
 done
+
+# ------ 合并残留扫描 ------
+# 扫描重复的函数调用参数（常见合并残留：参数写了两遍）
+echo "=== [RESIDUE] 重复位置参数 ==="
+grep -rnP "\.(\w+)\(\s*\w+,\s*\w+,\s*\w+,\s*\w+" backend/app/ --include="*.py" \
+  | grep -v "__pycache__" | grep -v "test_" || echo "(none)"
+
+echo "=== [RESIDUE] 重复 keyword 参数 ==="
+grep -rnP "(\w+)=.*,\s*\1=" backend/app/ --include="*.py" \
+  | grep -v "#" | grep -v "__pycache__" || echo "(none)"
+
+echo "=== [RESIDUE] 重复 import ==="
+for f in backend/app/gateway/app.py backend/app/gateway/routers/*.py; do
+  grep "^from " "$f" 2>/dev/null | cut -d' ' -f2 | sort | uniq -d | xargs -I{} echo "  $f: {}"
+done
+
+echo "=== [RESIDUE] 重复函数定义 ==="
+for f in backend/app/gateway/*.py backend/app/gateway/routers/*.py; do
+  dups=$(grep -oP "^(async )?def \w+" "$f" 2>/dev/null | sort | uniq -d)
+  if [ -n "$dups" ]; then echo "  $f: $dups"; fi
+done
+# ------------------------
 
 # 前端构建验证
 cd frontend && SKIP_ENV_VALIDATION=1 pnpm build
@@ -214,11 +236,13 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 - [ ] `deerflow_extensions/` 目录完整（与 backup-main 一致）
 - [ ] 后端全量 `.py` 语法检查通过（`python3 -m py_compile`）
 - [ ] 关键文件的本地自定义引用计数正常（`app_config`、`user_id` 等）
+- [ ] 合并残留扫描：无重复位置参数/keyword/import/函数定义
+- [ ] 无未解决的冲突标记残留（`grep -r "<<<<<<<" backend/ frontend/` 为空）
 - [ ] `.env` 中 `NEXT_PUBLIC_BACKEND_BASE_URL` 保持注释状态
 - [ ] 前端 `pnpm build` 通过
 - [ ] 后端 Gateway 启动，health 返回 200
+- [ ] API 冒烟测试：`/api/mcp/config`、`/api/skills`、`/api/memory` 返回 JSON（非 HTML）
 - [ ] `make test` 通过率 >= 99%
-- [ ] 无未解决的冲突标记残留（`grep -r "<<<<<<<" backend/ frontend/` 为空）
 - [ ] 工作区干净（`git status --short` 无意外修改）
 
 ---
@@ -333,6 +357,33 @@ grep -c "^import " frontend/src/components/workspace/messages/message-list.tsx |
 git status --short   # 确保无未暂存修改
 git diff --stat      # 确认差异在预期范围内
 ```
+
+### 教训 6：场景 C 冲突后必须扫描"重复参数"型残留
+
+**问题**：`routers/thread_runs.py` 和 `routers/runs.py` 中 `list_messages_by_run()` 的调用传入了 4 个位置参数（`thread_id, run_id, thread_id, run_id`），但函数签名只接受 2 个。这个重复参数在冲突标记清除时被遗漏，导致前端调用 `/api/threads/*/runs/*/messages` 时后端 500，浏览器控制台报 `JSON.parse` 错误。
+
+**根因**：场景 C 冲突中，上游在函数调用的第 1-2 行加了新参数，本地也在第 1-2 行改了不同的东西。手动合并时两个版本被拼接在一起没有去重——参数被写了两次但肉眼很难发现。
+
+**易发模式**：
+```python
+# 合并残留的典型模式：调用参数写了两遍
+await event_store.list_messages_by_run(
+    thread_id,      # 上游版本
+    run_id,
+    thread_id, run_id,  # ← 本地版本残留，没有删除
+    limit=50,
+)
+```
+
+**预防**：在 Step 6 中已加入了自动化扫描脚本。另一个快速检查方法：
+
+```bash
+# 检查函数调用中是否出现重复的变量名参数（残留特征）
+grep -rnP "\.(\w+)\(\s*\w+,\s*\w+,\s*\w+,\s*\w+" backend/app/ --include="*.py" \
+  | grep -v "__pycache__" | grep -v "test_"
+```
+
+如果输出包含 `thread_id, run_id, thread_id` 或类似 4 个以上位置参数的调用行，大概率是合并残留。
 
 ---
 
