@@ -74,3 +74,7 @@ if getattr(request.state, "_ads_authenticated", False):
 2. 删除 `deerflow_extensions/ads_auth/` 目录
 3. 删除 Docker 环境变量 `ADS_BASE_URL`、`ADS_MCP_CONFIG_PATH`
 4. 重启服务
+
+## 前端对应
+
+前端登录页和 Next.js 中间件位于 [frontend/extensions/ads_auth/](../../frontend/extensions/ads_auth/README.md)。
