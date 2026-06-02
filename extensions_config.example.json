@@ -57,5 +57,11 @@
       "description": "DeepRAG 知识库检索 - 支持文件检索、搜索、同步等功能"
     }
   },
-  "skills": {}
+  "skills": {
+    "surprise-me": { "enabled": false },
+    "image-generation": { "enabled": false },
+    "podcast-generation": { "enabled": false },
+    "video-generation": { "enabled": false },
+    "claude-to-deerflow": { "enabled": false }
+  }
 }

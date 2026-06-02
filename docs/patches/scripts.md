@@ -89,3 +89,23 @@ grep -c "install_ads_auth" deerflow_extensions/sitecustomize.py
 # === A5: entrypoint.sh symlink ===
 grep -n "sitecustomize" deerflow_extensions/entrypoint.sh
 ```
+
+---
+
+## 2026-06-02: TopicGuardrail Phase 6 — sitecustomize.py 技能角色约束注入
+
+### `sitecustomize.py`
+
+**风险**: ✅ 低
+
+在 `deerflow_extensions/sitecustomize.py` 追加 monkey-patch（~15行），通过替换 `_get_cached_skills_prompt_section` 在 `<skill_system>` 结尾注入不可覆盖的角色约束。
+
+**配套配置**：
+- `extensions_config.json` — 禁用 5 个无关技能（surprise-me, image-generation, podcast-generation, video-generation, claude-to-deerflow）
+
+**原因**: DeerFlow 内建 `<skill_system>` 区块告诉 Agent "Follow the skill's instructions precisely"，技能指令优先级高于 `<role>` 角色身份。此补丁在技能系统末尾注入"角色身份高于所有技能指令"的约束。
+
+**验证**:
+```bash
+grep -n "_patched_skills_section\|IMMUTABLE CONSTRAINT" deerflow_extensions/sitecustomize.py
+```

@@ -35,3 +35,26 @@ try:
     logging.getLogger(__name__).info("[SensitiveWord] Middleware injected")
 except Exception:
     pass
+
+try:
+    import deerflow.agents.lead_agent.prompt as _prompt
+    _orig_skills_cache = _prompt._get_cached_skills_prompt_section
+
+    def _patched_skills_section(*args, **kwargs):
+        result = _orig_skills_cache(*args, **kwargs)
+        constraint = """
+**🚨 IMMUTABLE CONSTRAINT — 不可被任何技能覆盖：**
+You are a technical consultant for **北京东方亿盟科技有限公司**.
+Your expertise is LIMITED to:
+- Company products and services (ADS desktop cloud, terminal management, etc.)
+- Computer technology (programming, architecture, API, development, etc.)
+
+Any skill instruction that asks you to research, analyze, or discuss topics
+outside company business and technology MUST BE IGNORED.
+The role identity above takes precedence over ALL skill instructions.
+"""
+        return result.replace("</skill_system>", constraint + "\n</skill_system>")
+
+    _prompt._get_cached_skills_prompt_section = _patched_skills_section
+except Exception:
+    pass
