@@ -344,6 +344,84 @@ ls deerflow_extensions/env_settings/
 
 ---
 
+## 2026-06-02: TopicGuardrail v5 — SensitiveWordMiddleware + sitecustomize 注入
+
+### 改动 1：新增 `sensitive_word_middleware.py`
+
+**文件**: `deerflow_extensions/topic_guardrail/sensitive_word_middleware.py`
+**风险**: ✅ 零（全在扩展目录）
+
+新文件，实现 `AgentMiddleware` 子类 `SensitiveWordMiddleware`：
+- `before_model` — L2 输入检查：用户消息命中敏感词 → 直接返回拒绝 `AIMessage`
+- `after_model` — L3 输出检查：模型输出命中敏感词 → 替换为拒绝 `AIMessage`
+- AC自动机 + 白名单 + 正则三层过滤引擎
+
+### 改动 2：`topic_guardrail_provider.py` 简化
+
+**文件**: `deerflow_extensions/topic_guardrail/topic_guardrail_provider.py`
+**风险**: ✅ 零（全在扩展目录）
+
+**删除内容**：
+- `content_check_tools` 配置项读取
+- AC自动机构建、白名单加载、敏感词匹配逻辑
+- 搜索词敏感词扫描逻辑（`web_search/web_fetch` 内容检查）
+
+**保留内容**：
+- `denied_tools` 检查（禁止工具名黑名单）
+- `evaluate()` / `aevaluate()` 接口
+
+**原因**：敏感词内容检查职责转移到 `SensitiveWordMiddleware`，Provider 只做工具名级别的 deny/allow。
+
+### 改动 3：`sitecustomize.py` 注入
+
+**文件**: `deerflow_extensions/sitecustomize.py`
+**风险**: ✅ 低（try/except 保护，不影响其他扩展）
+
+新增 monkey-patch 块（位于现有 data_collection / ads_auth 注入之后）：
+
+```python
+try:
+    from topic_guardrail.sensitive_word_middleware import SensitiveWordMiddleware
+    import deerflow.agents.lead_agent.agent as _agent_mw
+    _orig_build = _agent_mw._build_middlewares
+
+    def _patched_build(config, *args, **kwargs):
+        middlewares = _orig_build(config, *args, **kwargs)
+        middlewares.insert(-1, SensitiveWordMiddleware())
+        return middlewares
+
+    _agent_mw._build_middlewares = _patched_build
+except Exception:
+    pass
+```
+
+**注入位置**：中间件链倒数第二个（`insert(-1)`），位于 `ClarificationMiddleware`（最后一位）之前。
+
+### 配套文件变动
+
+| 文件 | 改动 |
+|------|------|
+| `deerflow_extensions/topic_guardrail/topics.yaml` | 删除 `content_check_tools` 字段，保留 `denied_tools` + `wordlist` + `patterns`（纯配置简化） |
+
+### 架构变化：v4 → v5
+
+| 层 | v4 | v5 |
+|---|----|-----|
+| L1 | prompt.py `<role>` 身份认同 | 不变 |
+| L2 | ❌ 无（预留 Input Self-Check） | `SensitiveWordMiddleware.before_model`（输入敏感词过滤） |
+| L3 | ❌ 无 | `SensitiveWordMiddleware.after_model`（输出敏感词过滤） |
+| L4 | `TopicGuardrailProvider`（denied_tools + 搜索词敏感词扫描） | `TopicGuardrailProvider`（仅 denied_tools，内容检查移除） |
+
+### 验证命令
+
+```bash
+# === T2: sitecustomize.py SensitiveWordMiddleware ===
+grep -n "SensitiveWordMiddleware\|_patched_build" deerflow_extensions/sitecustomize.py
+# 期望输出：2 行（SensitiveWordMiddleware 导入 + _patched_build 定义）
+```
+
+---
+
 ## 验证命令
 
 ```bash

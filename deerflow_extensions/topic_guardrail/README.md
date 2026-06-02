@@ -2,7 +2,7 @@
 
 ## 概述
 
-限制智能客服 Agent 只回答**公司业务**和**技术相关**内容，杜绝敏感内容和无关话题。采用 L1+L2 软约束 + L3 硬拦截的双层纵深防御。
+限制智能客服 Agent 只回答**公司业务**和**技术相关**内容，杜绝敏感内容和无关话题。采用 L1 角色身份 + L2 输入检查 + L3 输出检查 + L4 工具护栏的四层纵深防御。
 
 ## 架构
 
@@ -13,15 +13,20 @@ Layer 1: System Prompt <role> 身份认同（核心改动）
   → 参考：Anthropic Role Prompting 最佳实践
   → 文件: backend/packages/harness/deerflow/agents/lead_agent/prompt.py（~20行侵入）
 
-Layer 2: Input Self-Check（可选，后续扩展）
-  → NeMo Guardrails 模式，独立分类调用
-  → 用户输入先过话题分类器，不在范围内直接拒绝
+Layer 2: SensitiveWordMiddleware.before_model（v5 新增）
+  → 在 LLM 调用前检查用户输入文本
+  → AC自动机 + 白名单 + 正则三层过滤
+  → 命中敏感词 → 直接返回拒绝消息，不调用 LLM
 
-Layer 3: TopicGuardrailProvider（工具调用层面硬拦截，现有不变）
-  → 只判断"这个工具调用能不能放行"，不判断"能不能聊这个话题"
-  → bash          → ❌ 直接禁止
-  → web_search    → AC自动机扫描搜索词 → 命中敏感词则 deny
-  → 业务MCP工具   → ✅ 直接放行
+Layer 3: SensitiveWordMiddleware.after_model（v5 新增）
+  → 在 LLM 调用后检查模型输出文本
+  → 同上敏感词引擎
+  → 命中敏感词 → 替换为拒绝消息
+
+Layer 4: TopicGuardrailProvider（GuardrailMiddleware，v5 简化）
+  → 只判断 denied_tools（工具名黑名单），不做内容检查
+  → bash           → ❌ 直接禁止
+  → 其他所有工具   → ✅ 全部放行
 ```
 
 ## 文件说明

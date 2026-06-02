@@ -123,6 +123,9 @@ grep -n "env_settings" backend/app/gateway/app.py
 
 echo "=== T1: prompt.py 角色 identity 定义 ==="
 grep -n "北京东方亿盟科技" backend/packages/harness/deerflow/agents/lead_agent/prompt.py
+
+echo "=== T2: sitecustomize.py SensitiveWordMiddleware ==="
+grep -n "SensitiveWordMiddleware\|_patched_build" deerflow_extensions/sitecustomize.py
 ```
 
 如果某个 grep 返回空，说明补丁被覆盖了，需要重新打上。

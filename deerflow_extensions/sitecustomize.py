@@ -19,3 +19,19 @@ try:
     install_ads_auth()
 except Exception:
     pass
+
+try:
+    from topic_guardrail.sensitive_word_middleware import SensitiveWordMiddleware
+    import deerflow.agents.lead_agent.agent as _agent_mw
+    _orig_build = _agent_mw._build_middlewares
+
+    def _patched_build(config, *args, **kwargs):
+        middlewares = _orig_build(config, *args, **kwargs)
+        middlewares.insert(-1, SensitiveWordMiddleware())
+        return middlewares
+
+    _agent_mw._build_middlewares = _patched_build
+    import logging
+    logging.getLogger(__name__).info("[SensitiveWord] Middleware injected")
+except Exception:
+    pass

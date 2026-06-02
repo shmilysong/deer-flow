@@ -385,14 +385,14 @@ docs/GUARDRAILS.md           # This file
 
 ---
 
-## TopicGuardrailProvider (回答范围限制)
+## TopicGuardrail v5 (四层纵深防御)
 
 > **扩展位置**：`deerflow_extensions/topic_guardrail/`（零侵入）
 > **依赖**：`pyahocorasick`（AC自动机，C语言实现）
 
 ### 解决的问题
 
-限制智能客服 Agent 只回答公司业务和技术相关内容，拒绝敏感/无关话题。采用 L1+L2 软约束 + L3 硬拦截的双层防御。
+限制智能客服 Agent 只回答公司业务和技术相关内容，拒绝敏感/无关话题。采用 L1 角色身份 + L2 输入检查 + L3 输出检查 + L4 工具护栏的四层纵深防御。
 
 ### 分层架构
 
@@ -400,34 +400,42 @@ docs/GUARDRAILS.md           # This file
 用户输入
     │
     ▼
-[L1+L2: System Prompt <topic_boundary>]  
-    │  LLM 自行判断话题范围：在范围内则回答，不在则拒绝
-    │  （如果调用了工具）
+[L1: System Prompt <role> 身份认同]  
+    │  告诉 LLM 它是东方亿盟技术顾问
+    │  超出领域的问题"不了解"而非"被禁止"
+    │  （参考：Anthropic Role Prompting）
+    │
     ▼
-[L3: TopicGuardrailProvider]
-    ├─ bash                → ❌ 直接禁止
-    ├─ web_search/fetch    → AC自动机扫描搜索词
-    │   基础词库 ← 开源 Sensitive-lexicon（16,715词）
-    │   自定义词库 ← 公司特有敏感词
-    │   白名单 ← 防止业务词误杀
-    └─ 业务MCP工具          → ✅ 直接放行
+[L2: SensitiveWordMiddleware.before_model]
+    │  在 LLM 调用前检查用户输入文本
+    │  AC自动机 + 白名单 + 正则三层过滤
+    │  命中敏感词 → 直接返回拒绝消息（不调用 LLM）
+    │
+    ▼
+[L3: SensitiveWordMiddleware.after_model]
+    │  在 LLM 调用后检查模型输出文本
+    │  同上敏感词引擎
+    │  命中敏感词 → 替换为拒绝消息
+    │
+    ▼
+    （如果调用了工具）
+    ▼
+[L4: TopicGuardrailProvider (GuardrailMiddleware)]
+    ├─ bash                → ❌ 直接禁止（denied_tools）
+    └─ 其他工具（含 web_search/MCP） → ✅ 全部放行
 ```
 
-### L1+L2: System Prompt 角色定位
+### L1: System Prompt 角色定位
 
-在 `prompt.py` 的 `SYSTEM_PROMPT_TEMPLATE` 中添加 `<topic_boundary>` 区块，定义三级话题边界：
+在 `prompt.py` 的 `SYSTEM_PROMPT_TEMPLATE` 中，通过 `<role>` 身份定义替代原有的 `<topic_boundary>` 禁止清单。
 
-| 级别 | 内容 | 行为 |
-|------|------|------|
-| ✅ Allowed | 公司产品、技术问题、工作相关 | 自由回答 |
-| ⚡ Tolerated | 天气/日期/数学等通用知识 | 简短回答后引导回业务 |
-| 🚫 Forbidden | 政治/色情/暴力/违法/无关话题 | 礼貌拒绝 |
+**设计依据**：业界共识（Anthropic / NeMo / OpenAI / Microsoft）——角色定义是最强力的行为控制手段，模型"乐于助人"的本性会找理由绕过禁止清单，但不会绕过身份认同。
 
-**设计依据**：业界共识（NeMo Guardrails / OpenAI / Anthropic）——L1/L2 不穷举关键词，靠模型理解能力。
-
-### L3: GuardrailProvider 敏感词过滤
+### L2+L3: SensitiveWordMiddleware（新增 v5）
 
 匹配引擎使用 **AC自动机（Aho-Corasick）**，由 `pyahocorasick` 库提供（C 实现，万字文本 < 1ms）。
+
+**文件**: `deerflow_extensions/topic_guardrail/sensitive_word_middleware.py`
 
 **词库结构**：
 
@@ -441,21 +449,53 @@ wordlist/
 **判断逻辑**：
 
 ```python
-def evaluate(request):
-    # 1. denied_tools 检查
-    if request.tool_name in denied_tools:     # bash
-        return deny()
-    
-    # 2. 搜索词敏感词扫描
-    if request.tool_name in content_check_tools:  # web_search/web_fetch
-        if ac_automaton_matches(search_text):
-            return deny()
-    
-    # 3. 其他工具直接放行
-    return allow()
+class SensitiveWordMiddleware(AgentMiddleware):
+    name = "sensitive_word"
+
+    def before_model(self, state, runtime) -> dict | None:
+        text = self._get_last_user_message(state)
+        if text and self._has_sensitive(text):
+            return {"messages": [AIMessage(content="抱歉，您的输入包含不允许的内容。")]}
+
+    def after_model(self, state, runtime) -> dict | None:
+        text = self._get_last_ai_message(state)
+        if text and self._has_sensitive(text):
+            return {"messages": [AIMessage(content="抱歉，您的输入包含不允许的内容。")]}
 ```
 
-**白名单补偿**：即使敏感词库命中，如果搜索词在白名单中，仍然放行。防止公司业务词（如含"法"字的产品名）被误杀。
+**注入方式**：通过 `sitecustomize.py` 的 monkey-patch 注入到中间件链中（`_patched_build`），无需修改核心源码：
+
+```python
+def _patched_build(config, *args, **kwargs):
+    middlewares = _orig_build(config, *args, **kwargs)
+    middlewares.insert(-1, SensitiveWordMiddleware())
+    return middlewares
+
+_agent_mw._build_middlewares = _patched_build
+```
+
+**白名单补偿**：即使敏感词库命中，如果匹配词在白名单中，仍然放行。防止公司业务词被误杀。
+
+**与 v4 的区别**：
+- v4：敏感词过滤只在 `TopicGuardrailProvider.evaluate()` 中做，仅覆盖 `web_search/web_fetch` 的搜索词
+- v5：敏感词过滤升级为完整的 `AgentMiddleware`，覆盖 **用户输入全文**（L2）和 **模型输出全文**（L3），不限于搜索词
+- v5 的 `TopicGuardrailProvider` 仅保留 `denied_tools` 检查，不再做内容检查
+
+### L4: TopicGuardrailProvider（v5 简化版）
+
+**文件**: `deerflow_extensions/topic_guardrail/topic_guardrail_provider.py`
+
+**职责变更**：v5 中只判断工具名是否在禁止列表中，敏感词内容检查已交给 `SensitiveWordMiddleware`：
+
+```python
+class TopicGuardrailProvider:
+    name = "topic_guardrail"
+
+    def evaluate(self, request: GuardrailRequest) -> GuardrailDecision:
+        if request.tool_name in self._denied_tools:
+            return deny(reason="topic_guardrail.tool_denied")
+        return allow()
+```
 
 ### 配置方式
 
@@ -471,15 +511,14 @@ guardrails:
       config_path: deerflow_extensions/topic_guardrail/topics.yaml
 ```
 
-**topics.yaml**：
+**SensitiveWordMiddleware** 通过 `sitecustomize.py` 自动注入，无需额外配置。
+
+**topics.yaml**（v5 已删除 `content_check_tools`）：
 
 ```yaml
 tool_control:
   denied_tools:
     - bash
-  content_check_tools:
-    - web_search
-    - web_fetch
   wordlist:
     base: wordlist/base_sensitive_words.txt
     custom: wordlist/custom_sensitive_words.txt
@@ -494,17 +533,14 @@ tool_control:
 ### 测试
 
 ```bash
+# 测试 TopicGuardrailProvider（denied_tools 检查）
 PYTHONPATH=backend/packages/harness:deerflow_extensions uv run --directory backend \
   python3 -m pytest deerflow_extensions/topic_guardrail/tests/test_topic_guardrail_provider.py -v
-```
 
-覆盖 24 个测试用例：
-- AC自动机基础测试（空/英文/数字/特殊字符/超长性能）
-- 敏感词命中测试（基础/末尾/中间/多个/政治/色情）
-- 白名单补偿测试
-- 工具拦截测试（bash禁止/MCP放行/空搜索）
-- 并发测试（100次并发）
-- 正则模式测试
+# 测试 SensitiveWordMiddleware（L2+L3 敏感词检查）
+PYTHONPATH=backend/packages/harness:deerflow_extensions uv run --directory backend \
+  python3 -m pytest deerflow_extensions/topic_guardrail/tests/test_sensitive_word_middleware.py -v
+```
 
 ### 已知局限
 
