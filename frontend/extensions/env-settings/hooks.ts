@@ -38,6 +38,7 @@ export function useDeleteEnvSetting() {
 
 export function useVerifyProviderKey() {
   return useMutation({
-    mutationFn: (provider: string) => verifyProviderKey(provider),
+    mutationFn: ({ provider, apiKey, baseUrl }: { provider: string; apiKey?: string; baseUrl?: string }) =>
+      verifyProviderKey(provider, apiKey, baseUrl),
   });
 }

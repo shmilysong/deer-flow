@@ -93,7 +93,11 @@ export function EnvSettingsPage() {
   const handleVerify = useCallback(async () => {
     setStatusMessage(null);
     try {
-      const result = await verifyMutation.mutateAsync(selectedProviderId);
+      const result = await verifyMutation.mutateAsync({
+        provider: selectedProviderId,
+        apiKey: apiKey.trim() || undefined,
+        baseUrl: baseUrl || undefined,
+      });
       setStatusMessage({
         type: result.valid ? "success" : "error",
         text: result.message,
@@ -218,7 +222,11 @@ export function EnvSettingsPage() {
                     </div>
                     <Button
                       onClick={handleSave}
-                      disabled={!apiKey.trim() || updateMutation.isPending}
+                      disabled={
+                        !apiKey.trim() ||
+                        (useCustomModel ? !customModel.trim() : !model) ||
+                        updateMutation.isPending
+                      }
                     >
                       {updateMutation.isPending && (
                         <Loader2Icon className="mr-1 size-4 animate-spin" />
@@ -240,7 +248,7 @@ export function EnvSettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm">选择模型</label>
+                  <label className="text-sm">选择模型 *</label>
                   {useCustomModel ? (
                     <div className="flex items-center gap-2 max-w-md">
                       <Input
@@ -272,7 +280,7 @@ export function EnvSettingsPage() {
                       }}
                     >
                       <SelectTrigger className="w-full max-w-md">
-                        <SelectValue placeholder="选择模型（可选）" />
+                        <SelectValue placeholder="选择模型" />
                       </SelectTrigger>
                       <SelectContent>
                         {providerModels.length === 0 ? (

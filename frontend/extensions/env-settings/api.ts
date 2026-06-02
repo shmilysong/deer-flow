@@ -45,10 +45,16 @@ export async function deleteEnvSetting(
 
 export async function verifyProviderKey(
   provider: string,
+  apiKey?: string,
+  baseUrl?: string,
 ): Promise<VerifyResponse> {
   const response = await fetch(
     `${getBackendBaseURL()}/api/env-settings/${encodeURIComponent(provider)}/verify`,
-    { method: "POST" },
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: apiKey, base_url: baseUrl }),
+    },
   );
   return response.json() as Promise<VerifyResponse>;
 }

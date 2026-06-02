@@ -772,3 +772,23 @@ export function MarkdownContent({
 - Key 连通性验证
 - 一键清除厂商全部配置
 - `.env` 文件缺失时正常降级
+
+---
+
+## 2026-06-02: API Keys 配置界面优化 — 前端 Bug 修复
+
+### `frontend/extensions/env-settings/env-settings-page.tsx`
+
+**改动**:
+1. **保存按钮增加 model 强制检查**：
+   ```tsx
+   disabled={
+     !apiKey.trim() ||
+     (useCustomModel ? !customModel.trim() : !model) ||
+     updateMutation.isPending
+   }
+   ```
+2. **"选择模型"标签改为必填**：`选择模型` → `选择模型 *`
+3. **placeholder 去掉"可选"字样**：`选择模型（可选）` → `选择模型`
+
+**原因**: 后端已要求 model 必填（`min_length=1`），前端需同步。空 model 提交会被后端返回 422，用户体验差。

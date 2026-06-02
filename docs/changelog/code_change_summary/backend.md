@@ -424,6 +424,22 @@
 
 `frontend/src/core/env-settings/`（5 个文件）：types / api / hooks / page / extension，通过 `registerSettingsExtension()` 向 SettingsDialog 注入 API Keys 设置页面。
 
+### 2026-06-02: Env Settings Bug 修复
+
+**文件**: `deerflow_extensions/env_settings/router.py`（全部在扩展目录，零侵入）
+
+| 修复 | 改动 | 原因 |
+|------|------|------|
+| **model 必填** | `str \| None = None` → `str` (`min_length=1`) | 空 model 也能保存，保存后不注册 config.yaml |
+| **429 限流检测** | verify 端点新增 `status_code == 429` 分支 | 频繁验证时"网络错误"不明确 |
+| **详细日志** | `_register_model_to_config` + `_remove_models_from_config` 增加详细文件读写日志 | 清除后重保存模型不出现，需日志定位 |
+| **异常处理** | try/except 包裹所有 config.yaml 文件读写 | 防止文件损坏或权限问题时崩溃 |
+| **PUT 简化** | 移除 `if request.model` 判断 | model 已必填，无需可选分支 |
+
+**暴力测试结果**：15 项后端测试全部通过（空 model 422、硅基保存/验证/删除/循环 3 次、连续验证 5 次无网络错误、config.yaml 同步注册/清理）。
+
+---
+
 ### 详细补丁
 
 详细补丁记录见 `@./docs/patches/settings-dialog-ext/backend.md`（补丁标签 B1）

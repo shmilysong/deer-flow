@@ -32,12 +32,17 @@ class EnvSettingsUpdateRequest(BaseModel):
     provider: str = Field(description="Provider identifier")
     api_key: str = Field(description="Plain-text API key", min_length=1)
     base_url: str | None = Field(default=None, description="Custom base URL")
-    model: str | None = Field(default=None, description="Selected model")
+    model: str = Field(description="Selected model", min_length=1)
 
 
 class EnvSettingsUpdateResponse(BaseModel):
     success: bool = Field(default=True)
     message: str = Field(default="API Key saved successfully")
+
+
+class VerifyRequest(BaseModel):
+    api_key: str | None = Field(default=None, description="API key to verify (uses saved key from .env if empty)")
+    base_url: str | None = Field(default=None, description="Base URL to verify against (uses saved URL or default if empty)")
 
 
 class VerifyResponse(BaseModel):
@@ -130,6 +135,8 @@ def _slugify(name: str) -> str:
 def _register_model_to_config(provider_id: str, model_name: str, base_url: str) -> str | None:
     """向 config.yaml 追加模型条目。返回注册的 name 或 None。"""
     config_path = _get_config_path()
+    logger.info("_register_model_to_config: config_path=%s, provider_id=%s, model_name=%s, base_url=%s",
+                 config_path, provider_id, model_name, base_url)
     if not config_path:
         logger.warning("config.yaml not found, skipping model registration")
         return None
@@ -137,15 +144,22 @@ def _register_model_to_config(provider_id: str, model_name: str, base_url: str) 
     meta = PROVIDERS[provider_id]
     template = PROVIDER_CONFIG_TEMPLATE.get(provider_id)
     if not template:
+        logger.warning("No config template for provider %s", provider_id)
         return None
 
     model_slug = _slugify(model_name)
     entry_name = f"{provider_id}-{model_slug}"
 
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f) or {}
+    try:
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.error("Failed to read config.yaml: %s", e, exc_info=True)
+        return None
 
     models: list = cfg.get("models", [])
+    logger.info("Current models in config.yaml: %d entries", len(models))
+
     if any(isinstance(m, dict) and m.get("name") == entry_name for m in models):
         logger.info("Model %s already in config.yaml, skipping", entry_name)
         return entry_name
@@ -164,37 +178,53 @@ def _register_model_to_config(provider_id: str, model_name: str, base_url: str) 
     models.append(new_entry)
     cfg["models"] = models
 
-    with open(config_path, "w") as f:
-        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    try:
+        with open(config_path, "w") as f:
+            yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        logger.info("Registered model %s to config.yaml (total models: %d)", entry_name, len(models))
+    except Exception as e:
+        logger.error("Failed to write config.yaml: %s", e, exc_info=True)
+        return None
 
-    logger.info("Registered model %s to config.yaml", entry_name)
     return entry_name
 
 
 def _remove_models_from_config(provider_id: str) -> int:
     """从 config.yaml 删除该厂商注册的所有模型条目。返回删除数。"""
     config_path = _get_config_path()
+    logger.info("_remove_models_from_config: config_path=%s, provider_id=%s", config_path, provider_id)
     if not config_path:
+        logger.warning("config.yaml not found, cannot remove models")
         return 0
 
     prefix = f"{provider_id}-"
 
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f) or {}
+    try:
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.error("Failed to read config.yaml for removal: %s", e, exc_info=True)
+        return 0
 
     models: list = cfg.get("models", [])
     before = len(models)
+    logger.info("Before removal: %d models in config.yaml", before)
     models = [m for m in models if not (isinstance(m, dict) and m.get("name", "").startswith(prefix))]
     removed = before - len(models)
 
     if removed == 0:
+        logger.info("No models to remove for provider %s", provider_id)
         return 0
 
     cfg["models"] = models
-    with open(config_path, "w") as f:
-        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    try:
+        with open(config_path, "w") as f:
+            yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        logger.info("Removed %d model(s) for %s from config.yaml (remaining: %d)", removed, provider_id, len(models))
+    except Exception as e:
+        logger.error("Failed to write config.yaml after removal: %s", e, exc_info=True)
+        return 0
 
-    logger.info("Removed %d model(s) for %s from config.yaml", removed, provider_id)
     return removed
 
 
@@ -290,14 +320,14 @@ async def update_env_settings(request: EnvSettingsUpdateRequest) -> EnvSettingsU
         base_url = request.base_url or meta["default_base_url"]
         if request.base_url is not None:
             _write_env_value(f"{prefix}_BASE_URL", request.base_url)
-        msg = f"{meta['name']} API Key saved successfully"
-        if request.model:
-            _write_env_value(f"{prefix}_MODEL", request.model)
-            registered = _register_model_to_config(request.provider, request.model, base_url)
-            if registered:
-                msg += "，模型已注册到 config.yaml，刷新后可在聊天中使用"
-            else:
-                msg += "（config.yaml 未找到，仅保存 Key）"
+        model = request.model.strip()
+        _write_env_value(f"{prefix}_MODEL", model)
+        registered = _register_model_to_config(request.provider, model, base_url)
+        msg = f"{meta['name']} 配置已保存"
+        if registered:
+            msg += "，模型已注册到 config.yaml，刷新后可在聊天中使用"
+        else:
+            msg += "（config.yaml 未找到，仅保存 Key）"
         return EnvSettingsUpdateResponse(success=True, message=msg)
     except Exception as e:
         logger.error("Failed to save API Key: %s", e, exc_info=True)
@@ -313,20 +343,19 @@ async def update_env_settings(request: EnvSettingsUpdateRequest) -> EnvSettingsU
 async def delete_env_settings(provider: str) -> DeleteResponse:
     _validate_provider(provider)
     prefix = PROVIDERS[provider]["env_prefix"]
+    removed = _remove_models_from_config(provider)
     try:
         _unset_env_value(f"{prefix}_API_KEY")
         _unset_env_value(f"{prefix}_BASE_URL")
         _unset_env_value(f"{prefix}_MODEL")
-        removed = _remove_models_from_config(provider)
-        msg = f"已清除 {PROVIDERS[provider]['name']} 的配置"
-        if removed:
-            msg += f"，已从聊天模型列表中移除 {removed} 个模型"
-        return DeleteResponse(success=True, message=msg)
     except FileNotFoundError:
-        return DeleteResponse(success=True, message=".env file not found, nothing to clear")
+        pass
     except Exception as e:
-        logger.error("Failed to clear config for %s: %s", provider, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to clear config: {str(e)}")
+        logger.error("Failed to clear env for %s: %s", provider, e, exc_info=True)
+    msg = f"已清除 {PROVIDERS[provider]['name']} 的配置"
+    if removed:
+        msg += f"，已从聊天模型列表中移除 {removed} 个模型"
+    return DeleteResponse(success=True, message=msg)
 
 
 @router.post(
@@ -335,14 +364,14 @@ async def delete_env_settings(provider: str) -> DeleteResponse:
     summary="验证厂商 API Key",
     description="通过向该厂商 API 发送测试请求验证 Key 连通性",
 )
-async def verify_provider_key(provider: str) -> VerifyResponse:
+async def verify_provider_key(provider: str, request: VerifyRequest = None) -> VerifyResponse:
     _validate_provider(provider)
     meta = PROVIDERS[provider]
     prefix = meta["env_prefix"]
-    api_key = _read_env_value(f"{prefix}_API_KEY")
+    api_key = request.api_key.strip() if request and request.api_key else _read_env_value(f"{prefix}_API_KEY")
     if not api_key:
         return VerifyResponse(valid=False, message="API Key 未配置")
-    base_url = _read_env_value(f"{prefix}_BASE_URL") or meta["default_base_url"]
+    base_url = (request.base_url.strip() if request and request.base_url else None) or _read_env_value(f"{prefix}_BASE_URL") or meta["default_base_url"]
     verify_url = base_url.rstrip("/") + "/models"
     try:
         async with AsyncClient(timeout=10) as client:
@@ -358,7 +387,10 @@ async def verify_provider_key(provider: str) -> VerifyResponse:
                 return VerifyResponse(valid=False, message=f"{meta['name']} API Key 无权限 (403 Forbidden)")
             elif resp.status_code == 404:
                 return VerifyResponse(valid=True, message=f"{meta['name']} API Key 格式正确（端点返回 404，密钥可能有效）")
+            elif resp.status_code == 429:
+                return VerifyResponse(valid=False, message=f"{meta['name']} API 请求过于频繁，请稍后重试")
             else:
                 return VerifyResponse(valid=False, message=f"验证失败 (HTTP {resp.status_code})")
     except Exception as e:
+        logger.error("Verify %s failed: %s", provider, e, exc_info=True)
         return VerifyResponse(valid=False, message=f"网络错误: {str(e)}")
