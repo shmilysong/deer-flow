@@ -359,6 +359,58 @@ grep -c "registerInputSuggestion" frontend/extensions/input-suggestions/registry
 
 ---
 
+---
+
+## S5：`workspace-nav-menu.tsx` — 隐藏"设置和更多"下拉菜单多余按钮
+
+**文件**: `frontend/src/components/workspace/workspace-nav-menu.tsx`
+**行号**: L107-L164
+**风险**: ✅ 极低（纯注释隐藏，不删除代码，恢复时删除注释块即可）
+
+### 改动说明
+
+左下角"设置和更多"下拉菜单中，除"设置"按钮外，其余 6 项菜单按钮全部以 `{/* 🚫 ... */}` 注释块隐藏。隐藏的按钮：
+
+1. **分隔线**（L108 后的 `<DropdownMenuSeparator />`）
+2. **访问 DeerFlow 官方网站**（L109-L118）
+3. **在 Github 上查看 DeerFlow**（L119-L128）
+4. **分隔线**（L129 的 `<DropdownMenuSeparator />`）
+5. **报告问题**（L130-L139）
+6. **联系我们**（L140-L145）
+7. **分隔线**（L147 的外部 `<DropdownMenuSeparator />`）
+8. **关于 DeerFlow**（L148-L156）
+
+注释块内保留了全部原始代码，并在注释头中说明了隐藏原因和恢复方法。
+
+**同时注释的导入**：
+- `BugIcon`、`GlobeIcon`、`InfoIcon`、`MailIcon`（来自 `lucide-react`）
+- `DropdownMenuSeparator`（来自 `@/components/ui/dropdown-menu`）
+- `GithubIcon`（来自 `./github-icon`）
+
+恢复菜单项时需同时取消这些导入的注释。
+
+### 原因
+
+根据功能自定义需求，左下角"设置和更多"下拉菜单只保留"设置"按钮。官方网站、Github、报告问题、联系我们、关于 DeerFlow 等按钮均隐藏，简化菜单内容。
+
+### 恢复方法
+
+删除 `{/*` 注释开始标记和 `*/}` 注释结束标记之间的代码块。
+
+### 验证命令
+
+```bash
+# 确认隐藏按钮的注释标记存在
+grep -c "🚫 以下菜单项被隐藏" frontend/src/components/workspace/workspace-nav-menu.tsx
+# 应输出 1
+
+# 确认"设置"按钮仍然可见（不会被注释包裹）
+grep -c "t.common.settings" frontend/src/components/workspace/workspace-nav-menu.tsx
+# 应输出 1（未被注释）
+```
+
+---
+
 ## IS1：`input-box.tsx` — 输入建议按钮扩展注册
 
 **文件**: `frontend/src/components/workspace/input-box.tsx`
