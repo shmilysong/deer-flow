@@ -382,4 +382,131 @@ packages/harness/deerflow/agents/middlewares/
 config.example.yaml          # Three provider options documented
 tests/test_guardrail_middleware.py  # 25 tests
 docs/GUARDRAILS.md           # This file
+
+---
+
+## TopicGuardrailProvider (回答范围限制)
+
+> **扩展位置**：`deerflow_extensions/topic_guardrail/`（零侵入）
+> **依赖**：`pyahocorasick`（AC自动机，C语言实现）
+
+### 解决的问题
+
+限制智能客服 Agent 只回答公司业务和技术相关内容，拒绝敏感/无关话题。采用 L1+L2 软约束 + L3 硬拦截的双层防御。
+
+### 分层架构
+
+```
+用户输入
+    │
+    ▼
+[L1+L2: System Prompt <topic_boundary>]  
+    │  LLM 自行判断话题范围：在范围内则回答，不在则拒绝
+    │  （如果调用了工具）
+    ▼
+[L3: TopicGuardrailProvider]
+    ├─ bash                → ❌ 直接禁止
+    ├─ web_search/fetch    → AC自动机扫描搜索词
+    │   基础词库 ← 开源 Sensitive-lexicon（16,715词）
+    │   自定义词库 ← 公司特有敏感词
+    │   白名单 ← 防止业务词误杀
+    └─ 业务MCP工具          → ✅ 直接放行
+```
+
+### L1+L2: System Prompt 角色定位
+
+在 `prompt.py` 的 `SYSTEM_PROMPT_TEMPLATE` 中添加 `<topic_boundary>` 区块，定义三级话题边界：
+
+| 级别 | 内容 | 行为 |
+|------|------|------|
+| ✅ Allowed | 公司产品、技术问题、工作相关 | 自由回答 |
+| ⚡ Tolerated | 天气/日期/数学等通用知识 | 简短回答后引导回业务 |
+| 🚫 Forbidden | 政治/色情/暴力/违法/无关话题 | 礼貌拒绝 |
+
+**设计依据**：业界共识（NeMo Guardrails / OpenAI / Anthropic）——L1/L2 不穷举关键词，靠模型理解能力。
+
+### L3: GuardrailProvider 敏感词过滤
+
+匹配引擎使用 **AC自动机（Aho-Corasick）**，由 `pyahocorasick` 库提供（C 实现，万字文本 < 1ms）。
+
+**词库结构**：
+
+```
+wordlist/
+├── base_sensitive_words.txt    # 基础敏感词库（16,715词，覆盖政治/色情/暴力/违法）
+├── custom_sensitive_words.txt  # 公司自定义敏感词（可选）
+└── whitelist.txt               # 白名单（防止业务词误杀）
+```
+
+**判断逻辑**：
+
+```python
+def evaluate(request):
+    # 1. denied_tools 检查
+    if request.tool_name in denied_tools:     # bash
+        return deny()
+    
+    # 2. 搜索词敏感词扫描
+    if request.tool_name in content_check_tools:  # web_search/web_fetch
+        if ac_automaton_matches(search_text):
+            return deny()
+    
+    # 3. 其他工具直接放行
+    return allow()
+```
+
+**白名单补偿**：即使敏感词库命中，如果搜索词在白名单中，仍然放行。防止公司业务词（如含"法"字的产品名）被误杀。
+
+### 配置方式
+
+**config.yaml**：
+
+```yaml
+guardrails:
+  enabled: true
+  fail_closed: true
+  provider:
+    use: deerflow_extensions.topic_guardrail.topic_guardrail_provider:TopicGuardrailProvider
+    config:
+      config_path: deerflow_extensions/topic_guardrail/topics.yaml
+```
+
+**topics.yaml**：
+
+```yaml
+tool_control:
+  denied_tools:
+    - bash
+  content_check_tools:
+    - web_search
+    - web_fetch
+  wordlist:
+    base: wordlist/base_sensitive_words.txt
+    custom: wordlist/custom_sensitive_words.txt
+    whitelist: wordlist/whitelist.txt
+  patterns:
+    - "(习近平|法轮功|台湾独立|六四|天安门)"
+    - "(赌博|赌场|六合彩|赌球)"
+    - "(毒品|毒药|海洛因|冰毒)"
+    - "(色情|裸聊|一夜情)"
+```
+
+### 测试
+
+```bash
+PYTHONPATH=backend/packages/harness:deerflow_extensions uv run --directory backend \
+  python3 -m pytest deerflow_extensions/topic_guardrail/tests/test_topic_guardrail_provider.py -v
+```
+
+覆盖 24 个测试用例：
+- AC自动机基础测试（空/英文/数字/特殊字符/超长性能）
+- 敏感词命中测试（基础/末尾/中间/多个/政治/色情）
+- 白名单补偿测试
+- 工具拦截测试（bash禁止/MCP放行/空搜索）
+- 并发测试（100次并发）
+- 正则模式测试
+
+### 已知局限
+
+单字词（"法""党""帝"等46个）已从基础词库中过滤以减少误杀。如需恢复，请添加到 `custom_sensitive_words.txt`。变形绕过（谐音/拼音/拆字/繁简体）是关键词匹配的天生局限，后续可考虑添加 Qwen3Guard 语义审核。
 ```

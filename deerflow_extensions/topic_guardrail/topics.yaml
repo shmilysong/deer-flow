@@ -1,0 +1,15 @@
+tool_control:
+  denied_tools:
+    - bash
+  content_check_tools:
+    - web_search
+    - web_fetch
+  wordlist:
+    base: wordlist/base_sensitive_words.txt
+    custom: wordlist/custom_sensitive_words.txt
+    whitelist: wordlist/whitelist.txt
+  patterns:
+    - "(习近平|法轮功|台湾独立|六四|天安门)"
+    - "(赌博|赌场|六合彩|赌球)"
+    - "(毒品|毒药|海洛因|冰毒)"
+    - "(色情|裸聊|一夜情)"
