@@ -79,4 +79,4 @@ docker-compose -f docker-compose-dev.yaml --env-file ../.env config | Select-Str
 1. 用 try/except 包裹扩展模块的 import
 2. 在 `docs/patches/docker.md` 记录改动
 
-详见 `@./docs/零侵入扩展方法论.md`
+详见 `@./docs/methodology/零侵入扩展方法论.md`

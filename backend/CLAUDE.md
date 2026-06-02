@@ -688,4 +688,4 @@ See `docs/` directory for detailed documentation:
 2. 补丁记录到 `docs/patches/backend.md`
 3. 变更记录到 `docs/changelog/code_change_summary/backend.md`
 
-详见 `@./docs/零侵入扩展方法论.md`
+详见 `@./docs/methodology/零侵入扩展方法论.md`

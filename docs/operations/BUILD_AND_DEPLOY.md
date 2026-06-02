@@ -256,7 +256,37 @@ RuntimeError: NumPy was built with baseline optimizations:
 
 ---
 
-**最后更新**：2026-05-11
+## 5. Release 常见坑点
+
+### 5.1 `deerflow_entry.py` 必须 import 模块级 `app`，不能调 `create_app()`
+
+```python
+# ✅ 正确
+from app.gateway.app import app
+
+# ❌ 错误 — 导致双重 create_app()，ADS 路由注册到错误实例 → 404
+from app.gateway.app import create_app
+app = create_app()
+```
+
+**根因**：`import create_app` 触发模块级 `app = create_app()`（App #1），显式调用又创建 App #2。`install_ads_auth()` 有 `_installed` 防重入，只在 App #1 生效 → uvicorn 运行 App #2 → 404。
+
+### 5.2 `cp` 必须用整个目录复制，不加 `/*`
+
+```bash
+# ✅ 正确 — 保持 backend-bin/deerflow-gateway/(二进制+_internal/) 结构
+rm -rf /usr/xccloud/deerflow/backend-bin
+cp -r dist/deerflow-gateway /usr/xccloud/deerflow/backend-bin/
+
+# ❌ 错误 — 摊平结构，server-release.sh 路径不匹配
+cp -r dist/deerflow-gateway/* /usr/xccloud/deerflow/backend-bin/
+```
+
+服务器编译脚本 `@./backend/scripts/build-backend-on-server.sh` 头部已包含完整注意事项。
+
+---
+
+**最后更新**：2026-06-02
 **关联文件**：
 - `scripts/build-release.sh`
 - `backend/build-backend.sh`

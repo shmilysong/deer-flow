@@ -298,10 +298,6 @@ docker builder prune -a
 # 验证 .env 是否正确加载
 docker compose config | Select-String DEER_FLOW
 
-# 检查容器内存限制是否生效
-docker inspect deer-flow-frontend --format '{{.HostConfig.Memory}}'
-# 应返回：536870912（512MB 字节数）
-
 # 检查配置文件是否存在于容器内
 docker exec deer-flow-gateway ls -la /app/backend/config.yaml
 
@@ -603,3 +599,36 @@ docker compose -f docker-compose-dev.yaml down && docker compose -f docker-compo
 4. **不要提交 .env**：包含敏感密钥
 5. **先检查日志**：大多数问题在容器日志中可见
 6. **先尝试重启**：许多问题可通过 `docker compose down && docker compose up -d` 解决
+
+---
+
+## 启动前预检
+
+```bash
+# 检查 Docker 占用状态
+docker system df
+# 如果 Images 可回收率 > 80%，或 Build Cache > 10GB，先清理：
+docker system prune -a --volumes -f
+```
+
+### 构建铁律
+
+1. **禁止同时构建多镜像**：gateway、langgraph、frontend 绝对不能一起 build
+2. **除非明确说 "rebuild xxx"**，否则只用 `docker compose up -d` 不带 `--build`
+3. **volume 已挂载代码目录**，修改代码无需 rebuild：
+   - `frontend/src` → `/app/frontend/src`（Next.js 热更新）
+   - `backend/` → `/app/backend/`（uvicorn --reload 热更新）
+
+---
+
+## 快速验证
+
+```bash
+# 检查容器内存限制
+docker inspect deer-flow-frontend --format '{{.HostConfig.Memory}}'
+# 应显示：2147483648（2GB 字节数）
+
+# 检查 ADS MCP 构建状态
+ls "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp/dist/"
+ls "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp/node_modules/"
+```

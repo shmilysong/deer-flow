@@ -107,7 +107,7 @@ Requires Node.js 22+ and pnpm 10.26.2+.
 
 **绝对禁止**直接修改 `src/` 下的核心源码来添加功能。所有自定义功能必须优先走扩展目录。
 
-文档：`@./docs/零侵入扩展方法论.md`
+文档：`@./docs/methodology/零侵入扩展方法论.md`
 
 ### 扩展目录
 `extensions/` 存放所有自定义扩展：
@@ -131,5 +131,5 @@ Requires Node.js 22+ and pnpm 10.26.2+.
 3. 如有核心源码改动 → 记录到 `docs/changelog/code_change_summary/frontend.md`
 
 ### 补充参考
-- 扩展 README 模板详见 `@./docs/零侵入扩展方法论.md`
+- 扩展 README 模板详见 `@./docs/methodology/零侵入扩展方法论.md`
 - 现有前端扩展 README 参考：`@./extensions/ads_auth/README.md`
