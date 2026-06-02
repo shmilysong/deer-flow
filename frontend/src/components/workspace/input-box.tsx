@@ -7,7 +7,7 @@ import {
   LightbulbIcon,
   PaperclipIcon,
   PlusIcon,
-  SparklesIcon,
+  // SparklesIcon,  // 旧 SuggestionList 按钮用，已替换为 input-suggestions 扩展
   RocketIcon,
   XIcon,
   ZapIcon,
@@ -41,7 +41,7 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
-import { ConfettiButton } from "@/components/ui/confetti-button";
+// import { ConfettiButton } from "@/components/ui/confetti-button";  // 旧 SuggestionList 按钮用，已替换为 input-suggestions 扩展
 import {
   Dialog,
   DialogContent,
@@ -53,7 +53,7 @@ import {
 import {
   DropdownMenuGroup,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
+  // DropdownMenuSeparator,  // 旧 SuggestionList 创建菜单用，已替换为 input-suggestions 扩展
 } from "@/components/ui/dropdown-menu";
 import { fetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
@@ -62,6 +62,11 @@ import { useModels } from "@/core/models/hooks";
 import type { AgentThreadContext } from "@/core/threads";
 import { textOfMessage } from "@/core/threads/utils";
 import { cn } from "@/lib/utils";
+
+// --- EXTENSION IMPORT: input suggestions ---
+import { getInputSuggestions } from "../../../extensions/input-suggestions/registry";
+import "../../../extensions/input-suggestions/config";
+// --- EXTENSION IMPORT: end ---
 
 import {
   ModelSelector,
@@ -914,8 +919,52 @@ function SuggestionList() {
     },
     [textInput],
   );
+
+  const allSuggestions = getInputSuggestions();
+  const mainSuggestions = allSuggestions.filter(s => s.group === "main");
+  const createSuggestions = allSuggestions.filter(s => s.group === "create");
+
   return (
     <Suggestions className="min-h-16 w-fit items-start">
+      {/* ── 新代码：从扩展注册表动态加载按钮 ── */}
+      {mainSuggestions.map((s) => (
+        <Suggestion
+          key={s.id}
+          icon={s.icon}
+          suggestion={s.label}
+          onClick={() => handleSuggestionClick(s.prompt)}
+        />
+      ))}
+      {createSuggestions.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Suggestion icon={PlusIcon} suggestion={t.common.create} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuGroup>
+              {createSuggestions.map((s) => (
+                <DropdownMenuItem
+                  key={s.id}
+                  onClick={() => handleSuggestionClick(s.prompt)}
+                >
+                  <s.icon className="size-4" />
+                  {s.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {/*
+      ═══════════════════════════════════════════════════════════════
+      旧代码注释保留（原始硬编码按钮，已替换为动态注册模式）：
+      
+      旧代码来源：DeerFlow 官方 i18n 配置
+      替换原因：硬编码的"小惊喜/写作/研究/收集/学习/网页/图片/视频"按钮与公司业务无关
+      替换方案：通过 frontend/extensions/input-suggestions/ 注册业务相关按钮
+      替换时间：2026-06-02
+      侵入点：顶部 import { getInputSuggestions } from "../../../extensions/input-suggestions/registry"
+      
       <ConfettiButton
         className="text-muted-foreground cursor-pointer rounded-full px-4 text-xs font-normal"
         variant="outline"
@@ -956,6 +1005,8 @@ function SuggestionList() {
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+      ═══════════════════════════════════════════════════════════════
+      */}
     </Suggestions>
   );
 }

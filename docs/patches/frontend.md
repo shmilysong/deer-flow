@@ -349,4 +349,55 @@ grep -n "getSettingsExtensions" frontend/src/components/workspace/workspace-nav-
 
 # === S3b: workspace-nav-menu.tsx EXTENSION IMPORT ===
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/workspace-nav-menu.tsx
+
+# === IS1: input-box.tsx EXTENSION IMPORT ===
+grep -n "EXTENSION IMPORT" frontend/src/components/workspace/input-box.tsx
+
+# === input-suggestions registry ===
+grep -c "registerInputSuggestion" frontend/extensions/input-suggestions/registry.ts
 ```
+
+---
+
+## IS1：`input-box.tsx` — 输入建议按钮扩展注册
+
+**文件**: `frontend/src/components/workspace/input-box.tsx`
+**风险**: ✅ 极低
+
+### IS1a — 顶部增加扩展 import（L64-L68）
+
+```typescript
+// --- EXTENSION IMPORT: input suggestions ---
+import { getInputSuggestions } from "../../../extensions/input-suggestions/registry";
+import "../../../extensions/input-suggestions/config";
+// --- EXTENSION IMPORT: end ---
+```
+
+**原因**: `getInputSuggestions` 提供从扩展注册表动态获取按钮列表的能力，`config.ts` 的 side-effect import 触发按钮注册。
+
+### IS1b — SuggestionList 改为动态注册模式
+
+**代码位置**: SuggestionList 组件内（L920-L1010）
+
+原有的硬编码按钮（小惊喜/写作/研究/收集/学习/网页/图片/视频/技能）通过 JSX 注释块保留，替换为从扩展注册表动态加载的模式：
+
+```typescript
+const allSuggestions = getInputSuggestions();
+const mainSuggestions = allSuggestions.filter(s => s.group === "main");
+const createSuggestions = allSuggestions.filter(s => s.group === "create");
+```
+
+**配套扩展文件**（全在 `frontend/extensions/`，零侵入）：
+- `frontend/extensions/input-suggestions/registry.ts` — 注册表
+- `frontend/extensions/input-suggestions/config.ts` — 7 个业务按钮配置
+
+**原因**: 
+- 旧代码从 `t.inputBox.suggestions`（i18n 硬编码）渲染按钮，无法自定义
+- 新代码从扩展注册表动态加载按钮，只需修改 config.ts 即可增删改
+- 旧按钮中的"小惊喜"触发已禁用的 `surprise-me` 技能
+
+**恢复方法**: 
+1. 删除 `--- EXTENSION IMPORT ---` 注释块内的 2 行 import
+2. 删除 SuggestionList 中的新代码
+3. 取消 JSX 注释块，恢复旧代码
+4. 取消注释已注释的 import：`SparklesIcon`、`ConfettiButton`、`DropdownMenuSeparator`

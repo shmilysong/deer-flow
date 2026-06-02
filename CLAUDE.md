@@ -148,6 +148,7 @@ docs/
 | **ADS 统一认证** | `@./deerflow_extensions/ads_auth/` | **ADS JWT 登录代理，替换 DeerFlow 原生认证** |
 | **Env Settings** | `@./deerflow_extensions/env_settings/` | **多厂商 API Key 管理（7厂商），自动注册/清理 config.yaml 模型** |
 | **topic_guardrail** | `@./deerflow_extensions/topic_guardrail/` | 回答范围限制：System Prompt 角色定位 + L3 敏感词过滤 |
+| **input-suggestions** | `@./frontend/extensions/input-suggestions/` | 输入建议按钮自定义，替换内置的"小惊喜/写作/研究"等按钮 |
 | README | `@./deerflow_extensions/data_collection/README.md` | 安装/使用/卸载说明 |
 | API文档 | `@./deerflow_extensions/data_collection/API.md` | 完整API参考 |
 
