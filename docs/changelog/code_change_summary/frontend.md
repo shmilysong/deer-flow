@@ -810,3 +810,22 @@ export function MarkdownContent({
 **方式**: 原始代码全部保留在 `{/* 🚫 ... */}` 注释块中，注释头部标注了隐藏原因和恢复方法。恢复时删除注释块即可。
 
 **原因**: 根据功能自定义需求，简化"设置和更多"下拉菜单，只保留"设置"按钮。
+
+---
+
+## 2026-06-02: 移动端侧栏触发按钮
+
+### 零侵入扩展
+
+**扩展目录**: `frontend/extensions/mobile-sidebar/`
+
+**新增文件**:
+- `frontend/extensions/mobile-sidebar/mobile-sidebar-trigger.tsx` — 移动端浮动汉堡按钮组件
+
+**核心源码侵入**（2 行）:
+- `frontend/src/app/workspace/workspace-content.tsx` — L4 新增 import 行，L29 新增 `<MobileSidebarTrigger />` JSX 行
+
+**功能描述**:
+移动端（`< 768px`）在聊天页左上角显示浮动汉堡按钮，点击后以 Sheet 抽屉形式打开左侧栏（历史对话列表 + 导航 + 设置）。按钮在侧栏打开时自动隐藏（`openMobile === true` → `return null`），桌面端完全不受影响。
+
+**配套补丁记录**: `docs/patches/frontend.md` → A11

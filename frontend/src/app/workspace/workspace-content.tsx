@@ -6,6 +6,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/workspace/command-palette";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 
+import { MobileSidebarTrigger } from "../../../extensions/mobile-sidebar/mobile-sidebar-trigger";
+
 function parseSidebarOpenCookie(
   value: string | undefined,
 ): boolean | undefined {
@@ -25,6 +27,7 @@ export async function WorkspaceContent({
   return (
     <QueryClientProvider>
       <SidebarProvider className="h-screen" defaultOpen={initialSidebarOpen}>
+        <MobileSidebarTrigger />
         <WorkspaceSidebar />
         <SidebarInset className="min-w-0">{children}</SidebarInset>
       </SidebarProvider>

@@ -59,6 +59,7 @@ The frontend is a stateful chat application. Users create **threads** (conversat
   - `env-settings/` — API Key 配置 UI（7 厂商通用管理、模型选择、Key 连通性验证、清除配置）
   - `ads_auth/` — ADS 统一认证登录页
   - `input-suggestions/` — 输入建议按钮自定义（registry 注册表 + config 配置）
+  - `mobile-sidebar/` — 移动端侧栏浮动汉堡触发按钮
 - `hooks/` — Shared React hooks
 - **`lib/`** — Utilities (`cn()` from clsx + tailwind-merge)
 - **`core/settings-extensions/`** — SettingsDialog extension registry (`registry.ts` + `index.ts`)

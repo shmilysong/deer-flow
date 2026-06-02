@@ -320,6 +320,48 @@ if (process.env.NODE_ENV === "test" && process.env.DEER_FLOW_AUTH_DISABLED === "
 
 ---
 
+---
+
+## A11：`workspace-content.tsx` — 移动端侧栏触发按钮接入
+
+**文件**: `frontend/src/app/workspace/workspace-content.tsx`
+**行号**: L4, L29
+**风险**: ✅ 极低（2 行：1 行 import + 1 行 JSX，其余代码在 `extensions/` 目录）
+
+**改动**:
+
+```diff
+ import { cookies } from "next/headers";
+ import { Toaster } from "sonner";
++import { MobileSidebarTrigger } from "../../../extensions/mobile-sidebar/mobile-sidebar-trigger";
+ import { QueryClientProvider } from "@/components/query-client-provider";
+ ...
+       <SidebarProvider className="h-screen" defaultOpen={initialSidebarOpen}>
++        <MobileSidebarTrigger />
+         <WorkspaceSidebar />
+         <SidebarInset className="min-w-0">{children}</SidebarInset>
+       </SidebarProvider>
+```
+
+**原因**: 移动端（`< 768px`）左侧栏以 Sheet 抽屉形式渲染，关闭后无触发按钮。`MobileSidebarTrigger` 在移动端显示浮动汉堡按钮，点击调用 `toggleSidebar()` 打开 Sheet。
+
+**配套扩展文件**（全在 `frontend/extensions/mobile-sidebar/`，零侵入）：
+- `frontend/extensions/mobile-sidebar/mobile-sidebar-trigger.tsx` — 浮动汉堡按钮组件
+
+**恢复方法**: 删除 import 行和 JSX 行，删除 `frontend/extensions/mobile-sidebar/` 目录。
+
+**验证命令**:
+
+```bash
+# 确认 import 存在
+grep -n "MobileSidebarTrigger" frontend/src/app/workspace/workspace-content.tsx
+
+# 确认扩展组件存在
+ls frontend/extensions/mobile-sidebar/mobile-sidebar-trigger.tsx
+```
+
+---
+
 ## 验证命令
 
 ```bash
