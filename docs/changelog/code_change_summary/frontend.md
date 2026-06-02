@@ -1,4 +1,213 @@
-# 前端变更
+# 代码更改总结（按文件 diff，细到每一行）
+
+基于 `git diff HEAD` 的完整 diff，按文件列出所有变更。删除/新增文件单独说明。
+
+---
+
+## 一、后端
+
+### 1. `backend/CLAUDE.md`
+
+```diff
+@@ -156,7 +156,7 @@ FastAPI application on port 8001 with health check at `GET /health`.
+ | **Skills** (`/api/skills`) | `GET /` - list skills; `GET /{name}` - details; `PUT /{name}` - update enabled; `POST /install` - install from .skill archive |
+ | **Memory** (`/api/memory`) | `GET /` - memory data; `POST /reload` - force reload; `GET /config` - config; `GET /status` - config + data |
+ | **Uploads** (`/api/threads/{id}/uploads`) | `POST /` - upload files (auto-converts PDF/PPT/Excel/Word); `GET /list` - list; `DELETE /{filename}` - delete |
+-| **Artifacts** (`/api/threads/{id}/artifacts`) | `GET /{path}` - serve artifacts; `?download=true` for download with citation removal |
++| **Artifacts** (`/api/threads/{id}/artifacts`) | `GET /{path}` - serve artifacts; `?download=true` for file download |
+
+ Proxied through nginx: `/api/langgraph/*` → Gateway LangGraph-compatible runtime, all other `/api/*` → Gateway REST APIs.
+```
+
+- **第 159 行**：表格中 Artifacts 描述由「download with citation removal」改为「file download」。
+
+---
+
+### 2. `backend/packages/harness/deerflow/agents/lead_agent/prompt.py`
+
+```diff
+@@ -240,34 +240,8 @@ You have access to skills that provide optimized workflows for specific tasks. E
+ - Action-Oriented: Focus on delivering results, not explaining processes
+ </response_style>
+ 
+-<citations_format>
+-After web_search, ALWAYS include citations in your output:
+-
+-1. Start with a `<citations>` block in JSONL format listing all sources
+-2. In content, use FULL markdown link format: [Short Title](full_url)
+-
+-**CRITICAL - Citation Link Format:**
+-- CORRECT: `[TechCrunch](https://techcrunch.com/ai-trends)` - full markdown link with URL
+-- WRONG: `[arXiv:2502.19166]` - missing URL, will NOT render as link
+-- WRONG: `[Source]` - missing URL, will NOT render as link
+-
+-**Rules:**
+-- Every citation MUST be a complete markdown link with URL: `[Title](https://...)`
+-- Write content naturally, add citation link at end of sentence/paragraph
+-- NEVER use bare brackets like `[arXiv:xxx]` or `[Source]` without URL
+-
+-**Example:**
+-<citations>
+-{{"id": "cite-1", "title": "AI Trends 2026", "url": "https://techcrunch.com/ai-trends", "snippet": "Tech industry predictions"}}
+-{{"id": "cite-2", "title": "OpenAI Research", "url": "https://openai.com/research", "snippet": "Latest AI research developments"}}
+-</citations>
+-The key AI trends for 2026 include enhanced reasoning capabilities and multimodal integration [TechCrunch](https://techcrunch.com/ai-trends). Recent breakthroughs in language models have also accelerated progress [OpenAI](https://openai.com/research).
+-</citations_format>
+-
+-
+ <critical_reminders>
+ - **Clarification First**: ALWAYS clarify unclear/missing/ambiguous requirements BEFORE starting work - never assume or guess
+-- **Web search citations**: When you use web_search (or synthesize subagent results that used it), you MUST output the `<citations>` block and [Title](url) links as specified in citations_format so citations display for the user.
+ {subagent_reminder}- Skill First: Always load the relevant skill before starting **complex** tasks.
+```
+
+```diff
+@@ -341,7 +315,6 @@ def apply_prompt_template(subagent_enabled: bool = False) -> str:
+     # Add subagent reminder to critical_reminders if enabled
+     subagent_reminder = (
+         "- **Orchestrator Mode**: You are a task orchestrator - decompose complex tasks into parallel sub-tasks and launch multiple subagents simultaneously. Synthesize results, don't execute directly.\n"
+-        "- **Citations when synthesizing**: When you synthesize subagent results that used web search or cite sources, you MUST include a consolidated `<citations>` block (JSONL format) and use [Title](url) markdown links in your response so citations display correctly.\n"
+         if subagent_enabled
+         else ""
+     )
+```
+
+- **删除**：`<citations_format>...</citations_format>` 整段（原约 243–266 行）、critical_reminders 中「Web search citations」一条、`apply_prompt_template` 中「Citations when synthesizing」一行。
+
+---
+
+### 3. `backend/app/gateway/routers/artifacts.py`
+
+```diff
+@@ -1,12 +1,10 @@
+-import json
+ import mimetypes
+-import re
+ import zipfile
+ from pathlib import Path
+ from urllib.parse import quote
+ 
+-from fastapi import APIRouter, HTTPException, Request, Response
+-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
++from fastapi import APIRouter, HTTPException, Request
++from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
+ 
+ from app.gateway.path_utils import resolve_thread_virtual_path
+```
+
+- **第 1 行**：删除 `import json`。
+- **第 3 行**：删除 `import re`。
+- **第 6–7 行**：`fastapi` 中去掉 `Response`；`fastapi.responses` 中增加 `Response`（保留二进制 inline 返回用）。
+
+```diff
+@@ -24,40 +22,6 @@ def is_text_file_by_content(path: Path, sample_size: int = 8192) -> bool:
+         return False
+ 
+ 
+-def _extract_citation_urls(content: str) -> set[str]:
+-    """Extract URLs from <citations> JSONL blocks. Format must match frontend core/citations/utils.ts."""
+-    urls: set[str] = set()
+-    for match in re.finditer(r"<citations>([\s\S]*?)</citations>", content):
+-        for line in match.group(1).split("\n"):
+-            line = line.strip()
+-            if line.startswith("{"):
+-                try:
+-                    obj = json.loads(line)
+-                    if "url" in obj:
+-                        urls.add(obj["url"])
+-                except (json.JSONDecodeError, ValueError):
+-                    pass
+-    return urls
+-
+-
+-def remove_citations_block(content: str) -> str:
+-    """Remove ALL citations from markdown (blocks, [cite-N], and citation links). Used for downloads."""
+-    if not content:
+-        return content
+-
+-    citation_urls = _extract_citation_urls(content)
+-
+-    result = re.sub(r"<citations>[\s\S]*?</citations>", "", content)
+-    if "<citations>" in result:
+-        result = re.sub(r"<citations>[\s\S]*$", "", result)
+-    result = re.sub(r"\[cite-\d+\]", "", result)
+-
+-    for url in citation_urls:
+-        result = re.sub(rf"\[[^\]]+\]\({re.escape(url)}\)", "", result)
+-
+-    return re.sub(r"\n{3,}", "\n\n", result).strip()
+-
+-
+ def _extract_file_from_skill_archive(zip_path: Path, internal_path: str) -> bytes | None:
+```
+
+- **删除**：`_extract_citation_urls`、`remove_citations_block` 两个函数（约 25–62 行）。
+
+```diff
+@@ -172,24 +136,9 @@ async def get_artifact(thread_id: str, path: str, request: Request) -> FileRespo
+ 
+     # Encode filename for Content-Disposition header (RFC 5987)
+     encoded_filename = quote(actual_path.name)
+-    
+-    # Check if this is a markdown file that might contain citations
+-    is_markdown = mime_type == "text/markdown" or actual_path.suffix.lower() in [".md", ".markdown"]
+-    
++
+     # if `download` query parameter is true, return the file as a download
+     if request.query_params.get("download"):
+-        # For markdown files, remove citations block before download
+-        if is_markdown:
+-            content = actual_path.read_text()
+-            clean_content = remove_citations_block(content)
+-            return Response(
+-                content=clean_content.encode("utf-8"),
+-                media_type="text/markdown",
+-                headers={
+-                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+-                    "Content-Type": "text/markdown; charset=utf-8"
+-                }
+-            )
+         return FileResponse(path=actual_path, filename=actual_path.name, media_type=mime_type, headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"})
+ 
+     if mime_type and mime_type == "text/html":
+```
+
+- **删除**：`is_markdown` 判断及「markdown 时读文件 + remove_citations_block + Response」分支；download 时统一走 `FileResponse`。
+
+---
+
+### 4. `backend/packages/harness/deerflow/subagents/builtins/general_purpose.py`
+
+```diff
+@@ -24,21 +24,10 @@ Do NOT use for simple, single-step operations.""",
+ - Do NOT ask for clarification - work with the information provided
+ </guidelines>
+ 
+-<citations_format>
+-If you used web_search (or similar) and cite sources, ALWAYS include citations in your output:
+-1. Start with a `<citations>` block in JSONL format listing all sources (one JSON object per line)
+-2. In content, use FULL markdown link format: [Short Title](full_url)
+-- Every citation MUST be a complete markdown link with URL: [Title](https://...)
+-- Example block:
+-<citations>
+-{"id": "cite-1", "title": "...", "url": "https://...", "snippet": "..."}
+-</citations>
+-</citations_format>
+-
+ <output_format>
+ When you complete the task, provide:
+ 1. A brief summary of what was accomplished
+-2. Key findings or results (with citation links when from web search)
++2. Key findings or results
+ 3. Any relevant file paths, data, or artifacts created
+ 4. Issues encountered (if any)
+ </output_format>
+```
+
+- **删除**：`<citations_format>...</citations_format>` 整段。
+- **第 40 行**：第 2 条由「Key findings or results (with citation links when from web search)」改为「Key findings or results」。
+
+---
 
 ## 二、前端文档与工具
 
@@ -32,16 +241,6 @@
 ```
 
 - **第 33 行**：「and **citations**」删除。
-
----
-
-### 8. `frontend/src/components/workspace/settings/account-settings-page.tsx` — ADS 账号适配
-
-**原因**: ADS 统一认证登录后，user.email 固定为 "admin@example.com"、system_role 为 "user"（占位值），原生修改密码 API 不可用。隐藏不正确的字段和不可用的功能。
-
-**改动**:
-1. 隐藏 email/role 显示区（注释保留），改为只显示从 email 前缀提取的账号名
-2. 隐藏"修改密码"表单（注释保留），因为 ADS 密码由统一认证管理
 
 ---
 
@@ -634,224 +833,107 @@ export function MarkdownContent({
 
 ---
 
-## ADS 统一认证系统 — 前端模块
+## 五、技能与 Demo
 
-**前端扩展目录** `frontend/extensions/ads_auth/`:
+### 23. `skills/public/github-deep-research/SKILL.md`
 
-| 文件 | 说明 |
+```diff
+@@ -147,5 +147,5 @@ Save report as: `research_{topic}_{YYYYMMDD}.md`
+ 3. **Triangulate claims** - 2+ independent sources
+ 4. **Note conflicting info** - Don't hide contradictions
+ 5. **Distinguish fact vs opinion** - Label speculation clearly
+-6. **Cite inline** - Reference sources near claims
++6. **Reference sources** - Add source references near claims where applicable
+ 7. **Update as you go** - Don't wait until end to synthesize
+```
+
+- 第 150 行：一条措辞修改。
+
+---
+
+### 24. `skills/public/market-analysis/SKILL.md`
+
+```diff
+@@ -15,7 +15,7 @@ This skill generates professional, consulting-grade market analysis reports in M
+ - Follow the **"Visual Anchor → Data Contrast → Integrated Analysis"** flow per sub-chapter
+ - Produce insights following the **"Data → User Psychology → Strategy Implication"** chain
+ - Embed pre-generated charts and construct comparison tables
+-- Generate inline citations formatted per **GB/T 7714-2015** standards
++- Include references formatted per **GB/T 7714-2015** where applicable
+ - Output reports entirely in Chinese with professional consulting tone
+ ...
+@@ -36,7 +36,7 @@ The skill expects the following inputs from the upstream agentic workflow:
+ | **Analysis Framework Outline** | Defines the logic flow and general topics for the report | Yes |
+ | **Data Summary** | The source of truth containing raw numbers and metrics | Yes |
+ | **Chart Files** | Local file paths for pre-generated chart images | Yes |
+-| **External Search Findings** | URLs and summaries for inline citations | Optional |
++| **External Search Findings** | URLs and summaries for inline references | Optional |
+ ...
+@@ -87,7 +87,7 @@ The report **MUST NOT** stop after the Conclusion — it **MUST** include Refere
+ - **Tone**: McKinsey/BCG — Authoritative, Objective, Professional
+ - **Language**: All headings and content strictly in **Chinese**
+ - **Number Formatting**: Use English commas for thousands separators (`1,000` not `1，000`)
+-- **Data Citation**: **Bold** important viewpoints and key numbers
++- **Data emphasis**: **Bold** important viewpoints and key numbers
+ ...
+@@ -109,11 +109,9 @@ Every insight must connect **Data → User Psychology → Strategy Implication**
+    treating male audiences only as a secondary gift-giving segment."
+ ```
+ 
+-### Citations & References
+-- **Inline**: Use `[\[Index\]](URL)` format (e.g., `[\[1\]](https://example.com)`)
+-- **Placement**: Append citations at the end of sentences using information from External Search Findings
+-- **Index Assignment**: Sequential starting from **1** based on order of appearance
+-- **References Section**: Formatted strictly per **GB/T 7714-2015**
++### References
++- **Inline**: Use markdown links for sources (e.g. `[Source Title](URL)`) when using External Search Findings
++- **References section**: Formatted strictly per **GB/T 7714-2015**
+ ...
+@@ -183,7 +181,7 @@ Before considering the report complete, verify:
+ - [ ] All headings are in Chinese with proper numbering (no "Chapter/Part/Section")
+ - [ ] Charts are embedded with `![Description](path)` syntax
+ - [ ] Numbers use English commas for thousands separators
+-- [ ] Inline citations use `[\[N\]](URL)` format
++- [ ] Inline references use markdown links where applicable
+ - [ ] References section follows GB/T 7714-2015
+```
+
+- 多处：核心能力、输入表、Data Citation、Citations & References 小节与检查项，改为「references / 引用」表述并去掉 `[\[N\]](URL)` 格式要求。
+
+---
+
+### 25. `frontend/public/demo/threads/.../user-data/outputs/research_deerflow_20260201.md`
+
+```diff
+@@ -1,12 +1,3 @@
+-<citations>
+-{"id": "cite-1", "title": "DeerFlow GitHub Repository", "url": "https://github.com/bytedance/deer-flow", "snippet": "..."}
+-...（共 7 条 JSONL）
+-</citations>
+ # DeerFlow Deep Research Report
+ 
+ - **Research Date:** 2026-02-01
+```
+
+- 删除文件开头的 `<citations>...</citations>` 整块（9 行），正文从 `# DeerFlow Deep Research Report` 开始。
+
+---
+
+### 26. `frontend/public/demo/threads/.../thread.json`
+
+- **主要变更**：某条 `write_file` 的 `args.content` 中，将原来的「`<citations>...\n</citations>\n# DeerFlow Deep Research Report\n\n...`」改为「`# DeerFlow Deep Research Report\n\n...`」，即去掉 `<citations>...</citations>` 块，保留其后全文。
+- **其他**：一处 `present_files` 的 `filepaths` 由单行数组改为多行格式；文件末尾增加/统一换行。
+- 消息顺序、结构及其他字段未改。
+
+---
+
+## 六、统计
+
+| 项目 | 数量 |
 |------|------|
-| `middleware-handler.ts` | Next.js 认证网关核心逻辑 |
-| `LoginPage.tsx` | ADS 登录页（FlickeringGrid 背景） |
-| `LoginLayout.tsx` | 简版布局 |
-
-**前端桥接文件（3 个，各 1 行 re-export）**:
-
-| 文件 | re-export |
-|------|-----------|
-| `frontend/middleware.ts` | `extensions/ads_auth/middleware-handler` |
-| `frontend/src/app/ads-login/page.tsx` | `extensions/ads_auth/LoginPage` |
-| `frontend/src/app/ads-login/layout.tsx` | `extensions/ads_auth/LoginLayout` |
-
----
-
-## ADS 主页替换：用 ADS 登录页替换着陆页
-
-**动机**: 用户打开 `http://localhost:2026/` 时看到营销着陆页，需额外点击才能进入登录流程。直接用 ADS 登录页替换主页。
-
-**方案**: `next.config.js` `beforeFiles` rewrites
-
-- `/` → rewrite 到 `/ads-login`
-- `/login` → rewrite 到 `/ads-login`
-- `/login/:path*` → rewrite 到 `/ads-login/:path*`
-
-`beforeFiles` 在 Next.js 路由层运行，优先级高于页面路由和 middleware，确保 `/` 和 `/login` 永远不会被原有页面组件处理。
-
-**暴力测试结果**:
-
-| 测试项 | 结果 |
-|--------|------|
-| 连续 20 次访问 `/` | 全部 200 ✅ |
-| 并发 10 个请求 `/` | 全部 200 ✅ |
-| 80 次 4 路径交替（循环检测） | 19111ms，无循环 ✅ |
-| `/login` 直接访问 | 200，内容为 ADS 登录页 ✅ |
-| `/ads-login` 直接访问 | 200 ✅ |
-| 后端回归（setup-status / login-local / me） | 200 / 410 / 401 ✅ |
-
-**改动文件**: `frontend/next.config.js` — 新增 `beforeFiles` rewrites + 保留原有 API proxy rewrites
-
----
-
-## SettingsDialog 扩展架构
-
-**动机**: 为第三方扩展提供向 SettingsDialog 注入自定义设置页面的能力，无需修改核心组件。采用 EXTENSION SLOT 标记 + 注册表模式，支持任意数量的扩展页面。
-
-### 核心改动
-
-**S1：`settings-dialog.tsx` — 4 处 EXTENSION SLOT 插槽**
-
-| 位置 | 行号 | 改动 |
-|------|------|------|
-| Props 定义 | L42-L51 | 增加 `additionalSections` 和 `hiddenSectionIds` 两个可选 props |
-| 解构赋值 | L54-L56 | 从 props 中解构新字段，带默认值 |
-| sections 数组合并 | L69-L117 | 内置 sections 用 `hiddenSectionIds` 过滤后，追加 `additionalSections` |
-| 渲染区域 | L171-L173 | 匹配 `activeSection` 时渲染扩展组件 |
-
-**S2：`registry.ts` — SettingsExtension 注册表（新文件）**
-
-- `frontend/src/core/settings-extensions/registry.ts` — 类型定义 + 注册/获取/清空
-- `frontend/src/core/settings-extensions/index.ts` — re-export
-
-**S3：`workspace-nav-menu.tsx` — 集成扩展注册表**
-
-| 位置 | 行号 | 改动 |
-|------|------|------|
-| import | L30-L35 | 增加 `getSettingsExtensions` + `import "@/core/env-settings/extension"` |
-| 透传 | L70-L80 | `getSettingsExtensions()` → `additionalSections` prop |
-
-### 配套模块（前端核心，非补丁）
-
-**`frontend/src/core/env-settings/`**（5 个文件）:
-
-| 文件 | 说明 |
-|------|------|
-| `types.ts` | API 类型定义 |
-| `api.ts` | `fetch` 封装 |
-| `hooks.ts` | TanStack Query hooks |
-| `env-settings-page.tsx` | 设置页面 UI |
-| `extension.ts` | 注册入口，`registerSettingsExtension()` |
-
-### 详细补丁
-
-详细补丁记录见 `@./docs/patches/settings-dialog-ext/frontend.md`（补丁标签 S1-S3）。
-
----
-
-## 2026-05-29: 首屏闪屏修复 + ADS JWT 安全加固
-
-### `frontend/middleware.ts` — 中间件认证预检
-
-**改动**: `/` 路径处理逻辑从无条件 rewrite 改为先检查 `access_token` cookie。有 cookie 则 302 到 `/workspace`，无 cookie 才 rewrite 到 `/ads-login`。同时 cookie 名从 `ads_token` 统一为 `access_token`。
-
-**原因**: 消除已登录用户闪现登录页的问题；统一各层 cookie 命名。
-
-### `frontend/extensions/ads_auth/LoginPage.tsx` — loading 转圈
-
-**改动**: 新增 `isLoading` 状态，初始化时全屏居中显示 Loader2Icon 旋转动画，fetch 确认未认证后才渲染登录表单。
-
-**原因**: 已登录用户首次渲染时不闪现登录表单（与 middleware 预检双层保障）。
-
-### `frontend/src/core/auth/server.ts` — E2E 后门门控
-
-**改动**: `DEER_FLOW_AUTH_DISABLED` 外层包裹 `NODE_ENV === "test"` 条件。
-
-**原因**: 安全加固——E2E 测试后门仅在测试环境生效。
-
----
-
-## 2026-06-01: API Keys 配置界面优化
-
-### 前端文件变更
-
-| 文件 | 操作 | 说明 |
-|------|------|------|
-| `frontend/src/core/env-settings/types.ts` | 删除 | 迁至 `extensions/env-settings/` |
-| `frontend/src/core/env-settings/api.ts` | 删除 | 迁至 `extensions/env-settings/` |
-| `frontend/src/core/env-settings/hooks.ts` | 删除 | 迁至 `extensions/env-settings/` |
-| `frontend/src/core/env-settings/providers.ts` | 删除 | 迁至 `extensions/env-settings/` |
-| `frontend/src/core/env-settings/env-settings-page.tsx` | 删除 | 迁至 `extensions/env-settings/` |
-| `frontend/src/core/env-settings/extension.ts` | 删除 | 迁至 `extensions/env-settings/` |
-| `frontend/extensions/env-settings/` (6 个文件) | 新建 | 独立扩展目录，零侵入官方源码 |
-| `frontend/src/components/workspace/workspace-nav-menu.tsx` | 修改 | import 路径指向 `extensions/env-settings/extension` |
-
-### 新增能力
-
-- 支持 7 个国产大模型厂商管理：硅基流动、DeepSeek、Kimi、Doubao、千问、MiniMax、GLM
-- 服务商下拉选择器
-- 模型下拉选择（预置 + 自定义输入）
-- 自定义请求地址（可选）
-- Key 连通性验证
-- 一键清除厂商全部配置
-- `.env` 文件缺失时正常降级
-
----
-
-## 2026-06-02: API Keys 配置界面优化 — 前端 Bug 修复
-
-### `frontend/extensions/env-settings/env-settings-page.tsx`
-
-**改动**:
-1. **保存按钮增加 model 强制检查**：
-   ```tsx
-   disabled={
-     !apiKey.trim() ||
-     (useCustomModel ? !customModel.trim() : !model) ||
-     updateMutation.isPending
-   }
-   ```
-2. **"选择模型"标签改为必填**：`选择模型` → `选择模型 *`
-3. **placeholder 去掉"可选"字样**：`选择模型（可选）` → `选择模型`
-
-**原因**: 后端已要求 model 必填（`min_length=1`），前端需同步。空 model 提交会被后端返回 422，用户体验差。
-
----
-
-## 2026-06-02: 隐藏"设置和更多"下拉菜单多余按钮
-
-### `frontend/src/components/workspace/workspace-nav-menu.tsx`
-
-**改动**: 
-左下角"设置和更多"下拉菜单中，除"设置"按钮外，其余按钮全部以 JSX 注释块隐藏。隐藏的按钮包括：
-- 访问 DeerFlow 官方网站
-- 在 Github 上查看 DeerFlow
-- 报告问题
-- 联系我们
-- 关于 DeerFlow
-
-**方式**: 原始代码全部保留在 `{/* 🚫 ... */}` 注释块中，注释头部标注了隐藏原因和恢复方法。恢复时删除注释块即可。
-
-**原因**: 根据功能自定义需求，简化"设置和更多"下拉菜单，只保留"设置"按钮。
-
----
-
-## 2026-06-02: 移动端侧栏触发按钮
-
-### 零侵入扩展
-
-**扩展目录**: `frontend/extensions/mobile-sidebar/`
-
-**新增文件**:
-- `frontend/extensions/mobile-sidebar/mobile-sidebar-trigger.tsx` — 移动端浮动汉堡按钮组件
-
-**核心源码侵入**（2 行）:
-- `frontend/src/app/workspace/workspace-content.tsx` — L4 新增 import 行，L29 新增 `<MobileSidebarTrigger />` JSX 行
-
-**功能描述**:
-移动端（`< 768px`）在聊天页左上角显示浮动汉堡按钮，点击后以 Sheet 抽屉形式打开左侧栏（历史对话列表 + 导航 + 设置）。按钮在侧栏打开时自动隐藏（`openMobile === true` → `return null`），桌面端完全不受影响。
-
-**配套补丁记录**: `docs/patches/frontend.md` → A11
-
----
-
-## 2026-06-04: WeCom Bot 渠道配置
-
-### 零侵入扩展（合入 env-settings）
-
-**修改文件**:
-- `frontend/extensions/env-settings/api.ts` — 4 个函数 URL 改为 `/providers`，新增 4 个渠道 API
-- `frontend/extensions/env-settings/hooks.ts` — 新增 4 个渠道 hooks
-- `frontend/extensions/env-settings/types.ts` — 新增 3 个渠道类型
-- `frontend/extensions/env-settings/channel-settings-page.tsx` — **新文件**，独立渠道配置标签页
-- `frontend/extensions/env-settings/extension.ts` — 注册两个扩展（`api` + `channels`）
-
----
-
-## 2026-06-08: 渠道凭据模型通用化 + 多渠道支持
-
-### 零侵入扩展（合入 env-settings）
-
-**修改文件**:
-- `frontend/extensions/env-settings/channels.ts` — **新文件**，4 个国内 IM 渠道元数据（wecom/feishu/dingtalk/wechat）
-- `frontend/extensions/env-settings/types.ts` — `ChannelInfo`/`ChannelUpdateRequest` 凭据字典化，新增 `ChannelVerifyRequest`
-- `frontend/extensions/env-settings/api.ts` — `verifyChannel()` 参数改为 `credentials` 字典
-- `frontend/extensions/env-settings/hooks.ts` — `useVerifyChannel` 适配新签名
-- `frontend/extensions/env-settings/channel-settings-page.tsx` — 从硬编码 WeCom 表单改为多渠道选择器 + 动态凭据表单渲染
+| 修改文件 | 18 |
+| 新增文件 | 1（markdown-content.tsx） |
+| 删除文件 | 5（safe-citation-content.tsx, inline-citation.tsx, core/citations/* 共 3 个） |
+| 总行数变化 | +62 / -894（diff stat） |
+
+以上为按文件、细到每一行 diff 的代码更改总结。
