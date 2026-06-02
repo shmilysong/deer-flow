@@ -34,6 +34,26 @@ tail -f logs/gateway.log    # 后端日志
 tail -f logs/frontend.log   # 前端日志
 ```
 
+## ⚠️ 铁律：零侵入扩展原则
+
+**绝对禁止**直接修改核心源码来添加功能。所有自定义功能必须优先走扩展目录。详见 `@./docs/零侵入扩展方法论.md`。
+
+### 扩展目录
+- 前端：`frontend/extensions/`
+- 后端：`deerflow_extensions/`
+
+### 三层扩展模式（从优到劣）
+1. **Level 1 纯扩展** — 代码全在扩展目录，零侵入核心。如：input-suggestions、mobile-sidebar
+2. **Level 2 注入扩展** — 扩展目录实现逻辑，核心源码加 try/except 注入。如：env-settings
+3. **Level 3 补丁扩展** — 少量核心源码改动，try/except 包裹 + _installed 守卫。如：ads_auth、data_collection
+
+### 改造完成后必须归档文档
+| 文档 | 位置 | 适用场景 |
+|------|------|---------|
+| 扩展 README.md | 扩展目录自身 | 所有 Level |
+| 补丁记录 | `docs/patches/` | Level 2/3 |
+| 变更记录 | `docs/changelog/code_change_summary/` | 所有核心源码改动 |
+
 ## 项目概述
 
 DeerFlow 是一个基于 LangGraph 的 AI Super Agent 系统，采用全栈架构：
@@ -265,16 +285,8 @@ ls "/home/wing/wing/git/ds2server/ds2server/ads-agent/mcp/node_modules/"
 - 保持文档与代码同步
 
 ### 零侵入原则
-**优先零侵入方案，减少上游同步冲突**
 
-对 DeerFlow 核心源码（`backend/`、`frontend/`、`docker/` 等）的所有修改，必须优先评估零侵入方案：
-
-1. **优先走扩展目录**：能放在 `deerflow_extensions/` 或 `frontend/extensions/` 的逻辑，绝不直接改核心源码
-2. **必要时才打补丁**：只有在扩展目录无法实现（如 middleware 链注入、路由配置侵入）时才允许直接改核心文件
-3. **侵入代码必须 try/except 包裹**：所有注入扩展的 import 和调用都必须用 `try/except ImportError` 包起来——扩展不可用时 DeerFlow 仍能正常运行
-4. **降低冲突面**：侵入改动集中在少数文件的同一区域（如 `app.py` 的启动注入块、`auth_middleware.py` 的 dispatch 守卫），方便上游同步时快速识别和重放
-
-参考业界"依赖反转 + 插件化"最佳实践，零侵入不仅是设计目标，更是长期可维护性的保障。
+见上方 ⚠️ 铁律：零侵入扩展原则。完整方法论详见 `@./docs/零侵入扩展方法论.md`。
 
 ### 代码变更记录义务
 **重要：所有核心源码改动必须同时记录到 changelog 和 patches**

@@ -671,3 +671,21 @@ See `docs/` directory for detailed documentation:
 - [PATH_EXAMPLES.md](docs/PATH_EXAMPLES.md) - Path types and usage
 - [summarization.md](docs/summarization.md) - Context summarization
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
+
+## 零侵入扩展原则
+
+参考根目录 `CLAUDE.md` 的 ⚠️ 铁律：零侵入扩展原则。所有后端扩展位于 `deerflow_extensions/`：
+
+| 扩展 | 说明 | 扩展模式 |
+|------|------|---------|
+| `ads_auth/` | ADS 统一认证 | Level 2 + 3 |
+| `data_collection/` | 蒸馏数据采集 | Level 3 |
+| `env_settings/` | 多厂商 API Key 管理 | Level 2 |
+| `topic_guardrail/` | 回答范围限制 | Level 2 + 3 |
+
+**改造完成后必须归档文档：**
+1. 扩展目录下创建 `README.md`
+2. 补丁记录到 `docs/patches/backend.md`
+3. 变更记录到 `docs/changelog/code_change_summary/backend.md`
+
+详见 `@./docs/零侵入扩展方法论.md`

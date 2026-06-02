@@ -71,3 +71,12 @@ docker-compose -f docker-compose-dev.yaml --env-file ../.env config | Select-Str
 - **frontend** (port 3000): Next.js dev server
 - **gateway** (port 8001): FastAPI Gateway
 - **langgraph** (port 2024): LangGraph server
+
+## 零侵入扩展原则
+
+遵循根目录 `CLAUDE.md` 的 ⚠️ 铁律：零侵入扩展原则。如对 Docker 配置（`docker-compose*.yaml`、`Dockerfile`）的修改涉及扩展对接：
+
+1. 用 try/except 包裹扩展模块的 import
+2. 在 `docs/patches/docker.md` 记录改动
+
+详见 `@./docs/零侵入扩展方法论.md`

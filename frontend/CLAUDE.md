@@ -102,3 +102,34 @@ the public `/api/langgraph/*` prefix and rewrites it to Gateway's native `/api/*
 routes.
 
 Requires Node.js 22+ and pnpm 10.26.2+.
+
+## ⚠️ 铁律：零侵入扩展原则
+
+**绝对禁止**直接修改 `src/` 下的核心源码来添加功能。所有自定义功能必须优先走扩展目录。
+
+文档：`@./docs/零侵入扩展方法论.md`
+
+### 扩展目录
+`extensions/` 存放所有自定义扩展：
+- `ads_auth/` — ADS 统一认证登录页
+- `env-settings/` — API Key 配置 UI
+- `input-suggestions/` — 输入建议按钮（registry）
+- `mobile-sidebar/` — 移动端侧栏按钮
+
+### 已有注入点（优先使用）
+- `core/settings-extensions/registry.ts` — SettingsDialog 扩展注册
+- `core/input-suggestions/registry.ts` — 输入建议注册
+
+### 绝对禁区
+- 禁止直接修改 `components/ui/`（shadcn 生成）
+- 禁止直接修改 `components/ai-elements/`（Vercel AI SDK 生成）
+- 禁止在 `core/` 下创建业务逻辑文件（应在 extensions 下创建）
+
+### 改造完成后必须归档文档
+1. 扩展目录下创建 `README.md`（功能说明、目录结构、使用方式）
+2. 如有核心源码改动 → 记录到 `docs/patches/frontend.md`
+3. 如有核心源码改动 → 记录到 `docs/changelog/code_change_summary/frontend.md`
+
+### 补充参考
+- 扩展 README 模板详见 `@./docs/零侵入扩展方法论.md`
+- 现有前端扩展 README 参考：`@./extensions/ads_auth/README.md`
