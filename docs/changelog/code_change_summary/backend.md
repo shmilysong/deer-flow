@@ -339,7 +339,25 @@
 
 ---
 
-## 附录：ADS 认证迭代历史
+## 9. 2026-06-03: 角色定义外部化（v6）— 零侵入
+
+### `deerflow_extensions/topic_guardrail/role_definition.txt` — 新增运行时角色定义文件
+
+**原因**: `prompt.py` 编译进 PyInstaller 二进制后无法修改，将 `<role>` 角色定义移到扩展目录的独立文件。
+
+**改动**:
+- **新建** `deerflow_extensions/topic_guardrail/role_definition.txt` — 运行时角色定义（部署后直接编辑，重启生效）
+- **修改** `deerflow_extensions/sitecustomize.py` — 追加第三个 monkey-patch 块，拦截 `apply_prompt_template`，读取 `role_definition.txt` 替换 `<role>` 区块
+- **新建** `deerflow_extensions/topic_guardrail/tests/test_role_externalization.py` — 15 个暴力测试用例覆盖所有边界和注入场景
+
+**特点**:
+- 零核心源码侵入（全在 `deerflow_extensions/` 扩展目录）
+- 文件不存在时静默使用编译时默认值（优雅降级）
+- 15/15 暴力测试全部通过
+
+---
+
+## Appendix：ADS 认证迭代历史
 
 ### 早期方案（已过时，被当前方案取代）
 

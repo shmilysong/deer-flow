@@ -427,7 +427,18 @@ docs/GUARDRAILS.md           # This file
 
 ### L1: System Prompt 角色定位
 
-在 `prompt.py` 的 `SYSTEM_PROMPT_TEMPLATE` 中，通过 `<role>` 身份定义替代原有的 `<topic_boundary>` 禁止清单。
+`<role>` 身份定义来自 `role_definition.txt`（运行时覆盖）或 `prompt.py` 的 `SYSTEM_PROMPT_TEMPLATE`（编译时默认）。
+
+**运行时覆盖机制**：`sitecustomize.py` 拦截 `apply_prompt_template()`，如果 `deerflow_extensions/topic_guardrail/role_definition.txt` 存在，则替换 `<role>` 区块为该文件内容。文件不存在时静默使用编译时默认值。
+
+**部署后微调流程**：
+```bash
+# 编辑扩展目录中的角色定义文件
+vi /usr/xccloud/deerflow/backend-bin/_internal/deerflow_extensions/topic_guardrail/role_definition.txt
+# 重启服务
+systemctl restart deerflow
+```
+无需重新编译，无需重新打包 PyInstaller 二进制。
 
 **设计依据**：业界共识（Anthropic / NeMo / OpenAI / Microsoft）——角色定义是最强力的行为控制手段，模型"乐于助人"的本性会找理由绕过禁止清单，但不会绕过身份认同。
 

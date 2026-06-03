@@ -14,7 +14,7 @@
 | **ads_auth**（ADS 统一认证） | `app.py` + `auth_middleware.py` + `csrf_middleware.py` + `deps.py` + `docker-compose-dev.yaml` + `next.config.js` + `middleware.ts` + `types.ts` + `.env.example` | ✅ 低 | 9 个核心 |
 | **settings-dialog-ext**（SettingsDialog 扩展架构 + ADS 账号适配） | `settings-dialog.tsx` + `registry.ts` + `workspace-nav-menu.tsx` + `app.py` + `account-settings-page.tsx` | ✅ 低 | 4 个前端 + 1 个后端 |
 | **input-suggestions**（输入建议按钮自定义） | `input-box.tsx`（2 行 import + 渲染改用动态注册）+ `registry.ts` + `config.ts` | ✅ 极低 | **1 个前端核心 + 2 个扩展** |
-| **topic_guardrail**（回答范围限制） | `prompt.py`（角色身份重定义 ~20行，删除 topic_boundary 区块） | ✅ 极低 | **1 个核心** |
+| **topic_guardrail**（回答范围限制） | `sitecustomize.py`（2 个 patch 块，全在扩展目录，零核心侵入） | ✅ 无 | **0 个核心** |
 
 两条原则：
 1. 所有注入代码都是 `try/except ImportError` 包起来的——即使扩展不可用，DeerFlow 正常运行
@@ -26,7 +26,7 @@
 
 | 模块 | 文件 | 包含补丁 | 说明 |
 |------|------|---------|------|
-| **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`prompt.py` |
+| **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1, T3 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`prompt.py`、`sitecustomize.py` |
 | **前端** | [frontend.md](frontend.md) | A6, A7, A8, S1, S2, S3, S4, IS1 | `next.config.js`、`middleware.ts`、`types.ts`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx`、`account-settings-page.tsx`、`input-box.tsx` |
 | **Docker** | [docker.md](docker.md) | D2, D3, A4 | `docker-compose-dev.yaml`、`docker-compose.yaml` |
 | **脚本** | [scripts.md](scripts.md) | D4, D5, A5 | `entrypoint.sh`、`sitecustomize.py` |
@@ -122,11 +122,17 @@ grep -c "修改密码表单被隐藏" frontend/src/components/workspace/settings
 echo "=== B1: app.py env_settings ==="
 grep -n "env_settings" backend/app/gateway/app.py
 
-echo "=== T1: prompt.py 角色 identity 定义 ==="
-grep -n "北京东方亿盟科技" backend/packages/harness/deerflow/agents/lead_agent/prompt.py
+echo "=== T1: prompt.py 已回退到官方版本（角色定义在 role_definition.txt）==="
+grep -n "open-source super agent" backend/packages/harness/deerflow/agents/lead_agent/prompt.py
 
 echo "=== T2: sitecustomize.py SensitiveWordMiddleware ==="
 grep -n "SensitiveWordMiddleware\|_patched_build" deerflow_extensions/sitecustomize.py
+
+echo "=== T3: sitecustomize.py 角色外部化 ==="
+grep -n "_patched_apply\|role_definition.txt" deerflow_extensions/sitecustomize.py
+
+echo "=== T3a: role_definition.txt ==="
+ls -la deerflow_extensions/topic_guardrail/role_definition.txt
 
 echo "=== IS1: input-box.tsx 扩展 import ==="
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/input-box.tsx
