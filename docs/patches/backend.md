@@ -364,6 +364,78 @@ ls -la deerflow_extensions/topic_guardrail/role_definition.txt
 
 # === T3b: 单元测试 ===
 python -m pytest deerflow_extensions/topic_guardrail/tests/test_role_externalization.py -v
+
+# === T4: deerflow_entry.py TopicGuardrail 注入 ===
+grep -n "TopicGuardrail extensions\|_patched_build\|_patched_skills_section\|_patched_apply" backend/deerflow_entry.py
+
+# === T4a: deerflow_entry.py _ext_internal 路径修复 ===
+grep -n "_ext_candidates\|_internal_dir" backend/deerflow_entry.py
+```
+
+---
+
+## 2026-06-03: T4 — deerflow_entry.py 扩展注入 + 路径修复
+
+### `deerflow_entry.py` — PyInstaller 入口文件
+
+**文件**: `backend/deerflow_entry.py`
+**行号**: L20-L34（路径修复）、L164-L226（3 个 patch 块）
+**风险**: ✅ 低（try/except 保护，不影响正常启动）
+
+**两处改动**：
+
+#### T4a — `_ext_internal` 路径检测修复（L20-L34）
+
+**原因**：原代码第 21 行硬编码 `os.path.join(_backend_root, "deerflow_extensions")`，只匹配开发模式路径。PyInstaller 打包后 `deerflow_extensions` 在 `_internal/deerflow_extensions/` 下，导致找不到扩展目录。
+
+**改动**：改为多候选路径检测，优先查找 `_internal/deerflow_extensions/`（frozen），fallback 到 `backend/deerflow_extensions/`（dev）：
+
+```python
+_ext_candidates = [
+    os.path.join(_internal_dir, "deerflow_extensions"),   # frozen
+    os.path.join(_backend_root, "deerflow_extensions"),    # dev
+]
+_ext_internal = None
+for _cand in _ext_candidates:
+    if os.path.isdir(_cand):
+        _ext_internal = os.path.normpath(_cand)
+        ...
+        break
+```
+
+#### T4b — 新增第 11 节：3 个 monkey-patch 块（L164-L226）
+
+**原因**：`sitecustomize.py` 只被标准 CPython 解释器自动加载，**PyInstaller 不会加载它**。因此生产环境（二进制）下 `SensitiveWordMiddleware`、IMMUTABLE CONSTRAINT、角色定义替换 3 个 patch 全部不生效。需要将 patch 逻辑也执行一次在 `deerflow_entry.py`（PyInstaller 入口文件）中。
+
+**改动**：
+
+| 块 | 功能 | 代码 |
+|----|------|------|
+| 块1 | SensitiveWordMiddleware 注入 | `_patched_build` → 中间件链插入 |
+| 块2 | IMMUTABLE CONSTRAINT | `_patched_skills_section` → skill 指令不可覆盖角色 |
+| 块3 | 角色定义替换 | `_patched_apply` → 读取 role_definition.txt 替换 `<role>` |
+
+**角色路径**使用 `_ext_internal` 变量（自动适应 frozen/dev）：
+
+```python
+role_path = os.path.join(
+    os.path.dirname(_ext_internal),
+    "topic_guardrail/role_definition.txt"
+) if _ext_internal else None
+```
+
+**配套扩展文件**（零核心侵入）：
+- `deerflow_extensions/sitecustomize.py` — `__file__` → `realpath(__file__)` 修复（作用同上，给 dev 模式用）
+
+**影响**：现在生产部署（PyInstaller 二进制）也能正确加载 3 个 TopicGuardrail patch。
+
+**验证命令**：
+```bash
+# === T4: deerflow_entry.py TopicGuardrail 注入 ===
+grep -n "TopicGuardrail extensions\|_patched_build\|_patched_skills_section\|_patched_apply" backend/deerflow_entry.py
+
+# === T4a: deerflow_entry.py _ext_internal 路径修复 ===
+grep -n "_ext_candidates\|_internal_dir" backend/deerflow_entry.py
 ```
 
 ---

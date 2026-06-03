@@ -14,7 +14,7 @@
 | **ads_auth**（ADS 统一认证） | `app.py` + `auth_middleware.py` + `csrf_middleware.py` + `deps.py` + `docker-compose-dev.yaml` + `next.config.js` + `middleware.ts` + `types.ts` + `.env.example` | ✅ 低 | 9 个核心 |
 | **settings-dialog-ext**（SettingsDialog 扩展架构 + ADS 账号适配） | `settings-dialog.tsx` + `registry.ts` + `workspace-nav-menu.tsx` + `app.py` + `account-settings-page.tsx` | ✅ 低 | 4 个前端 + 1 个后端 |
 | **input-suggestions**（输入建议按钮自定义） | `input-box.tsx`（2 行 import + 渲染改用动态注册）+ `registry.ts` + `config.ts` | ✅ 极低 | **1 个前端核心 + 2 个扩展** |
-| **topic_guardrail**（回答范围限制） | `sitecustomize.py`（2 个 patch 块，全在扩展目录，零核心侵入） | ✅ 无 | **0 个核心** |
+| **topic_guardrail**（回答范围限制） | `deerflow_entry.py`（3 个 patch 块 + 路径检测修复）+ `sitecustomize.py`（2 个 patch 块，扩展目录） | ✅ 低 | **1 个核心 + 2 个扩展** |
 
 两条原则：
 1. 所有注入代码都是 `try/except ImportError` 包起来的——即使扩展不可用，DeerFlow 正常运行
@@ -26,7 +26,7 @@
 
 | 模块 | 文件 | 包含补丁 | 说明 |
 |------|------|---------|------|
-| **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1, T3 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`prompt.py`、`sitecustomize.py` |
+| **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1, T3, T4 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`prompt.py`、`sitecustomize.py`、`deerflow_entry.py` |
 | **前端** | [frontend.md](frontend.md) | A6, A7, A8, S1, S2, S3, S4, IS1 | `next.config.js`、`middleware.ts`、`types.ts`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx`、`account-settings-page.tsx`、`input-box.tsx` |
 | **Docker** | [docker.md](docker.md) | D2, D3, A4 | `docker-compose-dev.yaml`、`docker-compose.yaml` |
 | **脚本** | [scripts.md](scripts.md) | D4, D5, A5 | `entrypoint.sh`、`sitecustomize.py` |
@@ -133,6 +133,15 @@ grep -n "_patched_apply\|role_definition.txt" deerflow_extensions/sitecustomize.
 
 echo "=== T3a: role_definition.txt ==="
 ls -la deerflow_extensions/topic_guardrail/role_definition.txt
+
+echo "=== T3b: 单元测试 ==="
+python -m pytest deerflow_extensions/topic_guardrail/tests/test_role_externalization.py -v
+
+echo "=== T4: deerflow_entry.py TopicGuardrail 注入 ==="
+grep -n "TopicGuardrail extensions\|_patched_build\|_patched_skills_section\|_patched_apply" backend/deerflow_entry.py | head -5
+
+echo "=== T4a: deerflow_entry.py _ext_internal 路径修复 ==="
+grep -n "_ext_candidates\|_internal_dir" backend/deerflow_entry.py
 
 echo "=== IS1: input-box.tsx 扩展 import ==="
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/input-box.tsx

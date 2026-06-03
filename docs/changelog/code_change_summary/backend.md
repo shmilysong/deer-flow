@@ -357,6 +357,28 @@
 
 ---
 
+## 10. 2026-06-03: deerflow_entry.py — PyInstaller 入口扩展注入 + 路径修复
+
+### `backend/deerflow_entry.py` — 核心源码改动
+
+**原因**：
+1. `sitecustomize.py` 只被标准 CPython 解释器自动加载，PyInstaller 二进制不加载它 → 生产环境 3 个 patch 不生效
+2. 原 `_ext_internal` 路径检测只匹配 dev 模式（`backend/deerflow_extensions/`），不匹配 frozen 模式（`_internal/deerflow_extensions/`）
+
+**改动**：
+
+| 改动 | 行号 | 说明 |
+|------|------|------|
+| `_ext_internal` 路径检测 | L20-L34 | 优先查找 `_internal/deerflow_extensions/`，fallback 到 dev 路径 |
+| 第 11 节新增 3 个 patch | L164-L226 | SensitiveWordMiddleware / IMMUTABLE CONSTRAINT / Role override |
+
+**配套修复**：
+- `deerflow_extensions/sitecustomize.py` — `__file__` → `realpath(__file__)` 修复 symlink 路径问题
+
+**影响**：生产部署（PyInstaller 二进制）现在能正确加载全部 TopicGuardrail 功能。
+
+---
+
 ## Appendix：ADS 认证迭代历史
 
 ### 早期方案（已过时，被当前方案取代）

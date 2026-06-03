@@ -63,7 +63,7 @@ try:
     def _patched_apply(*args, **kwargs):
         result = _orig_apply(*args, **kwargs)
         role_path = _os.path.join(
-            _os.path.dirname(__file__),
+            _os.path.dirname(_os.path.realpath(__file__)),
             "topic_guardrail/role_definition.txt"
         )
         if _os.path.isfile(role_path):
