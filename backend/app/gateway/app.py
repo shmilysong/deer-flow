@@ -365,6 +365,20 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     except Exception as _e3:
         logger.warning(f"[EnvSettings] Install failed: {_e3}")
 
+    # —— Extension: TopicGuardrail (role + sensitive word + immutable constraint) —
+    import sys as _sys4
+    _ext_path4 = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
+    if _ext_path4 not in _sys4.path:
+        _sys4.path.insert(0, _ext_path4)
+    try:
+        from deerflow_extensions.patch_manager import apply_all
+        apply_all()
+        logger.info("[TopicGuardrail] All patches applied successfully")
+    except ImportError:
+        logger.warning("[TopicGuardrail] Package not found, topic guardrail is disabled")
+    except Exception as _e4:
+        logger.warning(f"[TopicGuardrail] Patch apply failed: {_e4}")
+
     # Auth: reject unauthenticated requests to non-public paths (fail-closed safety net)
     app.add_middleware(AuthMiddleware)
 

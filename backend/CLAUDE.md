@@ -681,7 +681,7 @@ See `docs/` directory for detailed documentation:
 | `ads_auth/` | ADS 统一认证 | Level 2 + 3 |
 | `data_collection/` | 蒸馏数据采集 | Level 3 |
 | `env_settings/` | 多厂商 API Key 管理 | Level 2 |
-| `topic_guardrail/` | 回答范围限制 + 角色定义外部化（编译后改 role_definition.txt 即可微调） | Level 2 + 3 |
+| `topic_guardrail/` | 回答范围限制 + 角色定义外部化（编译后改 role_definition.txt 即可微调）<br>注入入口：`app.py`(dev) + `sitecustomize.py`(Docker) + `deerflow_entry.py`(PyInstaller)<br>角色替换机制：模板字符串替换 `SYSTEM_PROMPT_TEMPLATE`，而非函数 monkeypatch | Level 2 + 3 |
 
 **改造完成后必须归档文档：**
 1. 扩展目录下创建 `README.md`

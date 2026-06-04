@@ -429,7 +429,21 @@ docs/GUARDRAILS.md           # This file
 
 `<role>` 身份定义来自 `role_definition.txt`（运行时覆盖）或 `prompt.py` 的 `SYSTEM_PROMPT_TEMPLATE`（编译时默认）。
 
-**运行时覆盖机制**：`sitecustomize.py` 拦截 `apply_prompt_template()`，如果 `deerflow_extensions/topic_guardrail/role_definition.txt` 存在，则替换 `<role>` 区块为该文件内容。文件不存在时静默使用编译时默认值。
+**运行时覆盖机制（V6 架构升级）**：
+
+角色注入通过**三个入口**确保覆盖所有运行模式：
+
+| 入口 | 适用模式 | 触发方式 |
+|------|---------|---------|
+| `backend/app/gateway/app.py` | 本地开发 | try/except 调用 `patch_manager.apply_all()` |
+| `deerflow_extensions/sitecustomize.py` | Docker | CPython 自动加载（符号链接到 site-packages） |
+| `backend/deerflow_entry.py` | PyInstaller 打包 | 显式调用 `apply_all(ext_internal=...)` |
+
+所有入口通过 `_APPLIED` 幂等保护，三者同时存在也不会重复执行。
+
+**技术细节**：`_patch_role()` 采用**模板字符串替换**而非函数 monkeypatch——直接替换 `SYSTEM_PROMPT_TEMPLATE` 模块级变量。Python 函数通过 `LOAD_GLOBAL` 字节码每次动态查找模块全局变量，修改后所有调用者（不论如何导入）立即生效。免除函数 monkeypatch 在 `from X import Y` 模式下的导入时序脆弱性。
+
+当 `role_definition.txt` 存在时，`apply_prompt_template()` 返回的完整 prompt 中包含文件中的角色定义。文件不存在时静默使用编译时默认值。
 
 **部署后微调流程**：
 ```bash

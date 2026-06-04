@@ -43,7 +43,29 @@ Layer 4: TopicGuardrailProvider（GuardrailMiddleware，v5 简化）
 
 ## 集成方式
 
-通过 DeerFlow 原生 GuardrailMiddleware + sitecustomize.py 注入，**完全零侵入 core 源码**。
+通过三个入口注入，**完全零侵入 core 源码**：
+
+| 入口 | 适用模式 | 机制 |
+|------|---------|------|
+| `backend/app/gateway/app.py` | 本地开发 | try/except 调用 `patch_manager.apply_all()` |
+| `deerflow_extensions/sitecustomize.py` | Docker | CPython 自动加载（符号链接到 site-packages） |
+| `backend/deerflow_entry.py` | PyInstaller 打包 | 第 11 节显式调用 `apply_all(ext_internal=...)` |
+
+所有入口通过 `_APPLIED` 幂等保护，三者同时存在也不会重复执行。
+
+### 角色注入机制（V6 架构升级）
+
+`_patch_role()` 采用**模板字符串替换**而非函数 monkeypatch：
+
+```python
+# ✅ 当前方案：替换模块级字符串
+_prompt.SYSTEM_PROMPT_TEMPLATE = new_template
+
+# ❌ 旧方案：替换函数引用（受 from X import Y 时序影响）
+_prompt.apply_prompt_template = _patched_apply
+```
+
+Python 函数通过 `LOAD_GLOBAL` 字节码每次动态查找模块全局变量，修改 `SYSTEM_PROMPT_TEMPLATE` 后所有调用者（不论如何导入）立即生效。免除函数 monkeypatch 在 `from X import Y` 模式下的时序脆弱性。
 
 **config.yaml**：
 

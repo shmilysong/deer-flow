@@ -562,48 +562,88 @@ grep -n "SensitiveWordMiddleware\|_patched_build" deerflow_extensions/sitecustom
 
 ---
 
-## 验证命令
+## 2026-06-04: T6 — 角色注入架构升级（模板字符串替换 + app.py 注入入口）
 
+### `patch_manager.py` — `_patch_role()` 从函数 monkeypatch 改为模板字符串替换
+
+**文件**: `deerflow_extensions/patch_manager.py`
+**行号**: L145-L188
+**风险**: ✅ 零（全在扩展目录）
+
+**架构升级**：
+| 旧方案 | 新方案 |
+|--------|--------|
+| monkeypatch `apply_prompt_template` 函数引用 | 替换 `SYSTEM_PROMPT_TEMPLATE` 模块级字符串 |
+| 受 `from X import Y` 导入时序影响 | Python `LOAD_GLOBAL` 字节码动态查找，与导入路径无关 |
+
+**原因**: `agent.py:27` 和 `client.py:37` 使用 `from deerflow.agents.lead_agent.prompt import apply_prompt_template` 导入。函数 monkeypatch 在 `from X import Y` 模式下，如果导入发生在 patch 之前，已导入的模块持有旧函数引用。而修改模块级字符串常量后，所有调用者（不论如何导入）通过 `LOAD_GLOBAL` 字节码每次动态查找模板，即时生效。
+
+**改动**：
+```python
+# 旧方案：替换函数引用
+_orig = _prompt.apply_prompt_template
+# ... 包装器 ...
+_prompt.apply_prompt_template = _patched_apply
+
+# 新方案：替换模块级字符串
+_prompt.SYSTEM_PROMPT_TEMPLATE = new_template
+```
+
+### `app.py` — 新增 TopicGuardrail 注入块
+
+**文件**: `backend/app/gateway/app.py`
+**行号**: L269-L380（在 env_settings 注入之后、AuthMiddleware 之前）
+**风险**: ✅ 低（与现有 ads_auth/env_settings/data_collection 注入块完全一致）
+
+```python
+    # —— Extension: TopicGuardrail (role + sensitive word + immutable constraint) —
+    import sys as _sys4
+    _ext_path4 = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
+    if _ext_path4 not in _sys4.path:
+        _sys4.path.insert(0, _ext_path4)
+    try:
+        from deerflow_extensions.patch_manager import apply_all
+        apply_all()
+        logger.info("[TopicGuardrail] All patches applied successfully")
+    except ImportError:
+        logger.warning("[TopicGuardrail] Package not found, topic guardrail is disabled")
+    except Exception as _e4:
+        logger.warning(f"[TopicGuardrail] Patch apply failed: {_e4}")
+```
+
+**原因**: 本地开发模式 `start-deerflow.sh` 使用 `PYTHONPATH=.` 启动，但没有 sitecustomize 符号链接 → CPython 不会自动加载 `sitecustomize.py` → `apply_all()` 从未被调用。`app.py` 已有 data_collection/ads_auth/env_settings 三个注入块，遗漏了 topic_guardrail。
+
+### 连带修复：import 路径统一 + SensitiveWordMiddleware 重复注入守卫
+
+**涉及文件**: `deerflow_extensions/sitecustomize.py` + `backend/deerflow_entry.py`
+**风险**: ✅ 低
+
+**问题**: `apply_all()` 的 `_APPLIED` 幂等保护因 `sys.modules` 入口不一致而失效。
+
+| 文件 | 原 import | 问题 |
+|------|----------|------|
+| `sitecustomize.py` | `from patch_manager import apply_all` | `sys.modules['patch_manager']` |
+| `app.py` | `from deerflow_extensions.patch_manager import apply_all` | `sys.modules['deerflow_extensions.patch_manager']` |
+
+Python 将两个路径视为**不同模块对象**，各有独立的 `_APPLIED` 变量。第二次调用时 `_APPLIED` 仍为 `False`，导致 SensitiveWordMiddleware 在中间件链中出现两次 → `AssertionError: Please remove duplicate middleware instances.`
+
+**修复**:
+1. **`sitecustomize.py`** — `from patch_manager` → `from deerflow_extensions.patch_manager`（统一模块键名）
+2. **`deerflow_entry.py`** — 同上统一 + `sys.path` 改为加入父目录（而非扩展目录自身）
+3. **`patch_manager._patch_sensitive_word()`** — 加 `isinstance` 双重守卫：`any(isinstance(m, SensitiveWordMiddleware) for m in middlewares)` — 即使 `_APPLIED` 失效也不会重复注入
+
+**验证命令**:
 ```bash
-# === D1: app.py data_collection 注入 ===
-grep -n "install_data_collection" backend/app/gateway/app.py
+# === T6: app.py topic_guardrail 注入 ===
+grep -n "TopicGuardrail\|apply_all" backend/app/gateway/app.py
 
-# === A1: app.py ads_auth 注入 ===
-grep -n "install_ads_auth" backend/app/gateway/app.py
+# === T6a: patch_role 模板替换验证 ===
+grep -n "SYSTEM_PROMPT_TEMPLATE = new_template" deerflow_extensions/patch_manager.py
 
-# === A2a: auth_middleware /login/ads ===
-grep -n "login/ads" backend/app/gateway/auth_middleware.py
+# === T6b: 新暴力测试（25个单元测试全部通过） ===
+cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python3 -m pytest ../deerflow_extensions/topic_guardrail/tests/test_role_injection_fix.py -v
 
-# === A2b: auth_middleware ADS decode ===
-grep -n "username.*payload\|Example.com\|@example" backend/app/gateway/auth_middleware.py | head -3
-
-# === A3: csrf /login/ads ===
-grep -n "login/ads" backend/app/gateway/csrf_middleware.py
-
-# === A3b: routers/auth.py ads_token ===
-grep -n "ads_token" backend/app/gateway/routers/auth.py
-
-# === A10: deps.py state.user ===
-grep -n "user_from_state\|request.state.user" backend/app/gateway/deps.py
-
-# === B1a: app.py env_settings import ===
-grep -n "env_settings" backend/app/gateway/app.py | head -3
-
-# === B1b: app.py env_settings include_router ===
-grep -n "env_settings.router" backend/app/gateway/app.py
-
-# === B1c: app.py env-settings openapi tag ===
-grep -n "env-settings" backend/app/gateway/app.py
-
-# === T1: prompt.py 角色 identity 定义 ===
-grep -n "北京东方亿盟科技" backend/packages/harness/deerflow/agents/lead_agent/prompt.py
-
-# === T3: sitecustomize.py 角色外部化 ===
-grep -n "_patched_apply\|role_definition.txt" deerflow_extensions/sitecustomize.py
-
-# === T3a: role_definition.txt ===
-ls -la deerflow_extensions/topic_guardrail/role_definition.txt
-
-# === T3b: 单元测试 ===
-python -m pytest deerflow_extensions/topic_guardrail/tests/test_role_externalization.py -v
+# === T6c: 启动日志验证 ===
+grep "TopicGuardrail.*Patches:" logs/gateway.log
+grep "SYSTEM_PROMPT_TEMPLATE updated" logs/gateway.log
 ```

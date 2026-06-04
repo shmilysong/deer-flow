@@ -501,3 +501,44 @@
 2. 统一只设置 `access_token`，不再同时设置 `ads_token`
 
 **原因**: cookie 寿命与 JWT 对齐；统一 cookie 命名消除前端中间件/SSR/后端各层 cookie 名不一致的隐患。
+
+---
+
+## 11. 2026-06-04: TopicGuardrail 角色注入架构升级
+
+### 问题背景
+- 本地开发模式和 PyInstaller 打包模式下角色注入完全不生效
+- 根因 #1：`app.py` 缺少 topic_guardrail 的 try/except 注入块（已有 data_collection/ads_auth/env_settings）
+- 根因 #2：函数 monkeypatch（替换 `apply_prompt_template` 引用）在 `from X import Y` 导入模式下不可靠
+
+### 改动
+
+#### `deerflow_extensions/patch_manager.py` — `_patch_role()` 重写
+- **架构升级**：从替换函数引用改为替换模块级字符串 `SYSTEM_PROMPT_TEMPLATE`
+- 原理：Python 函数通过 `LOAD_GLOBAL` 字节码动态查找模块全局变量，修改后所有调用者不论如何导入都立即生效
+- 保留 mtime 缓存、内容校验、空文件/过短告警
+
+#### `backend/app/gateway/app.py` — 新增第 4 个扩展注入块
+- 在 `env_settings` 注入之后、`AuthMiddleware` 之前添加 TopicGuardrail try/except 注入
+- 与 `data_collection`/`ads_auth`/`env_settings` 的注入模式完全一致
+
+### 测试覆盖
+- 25 个单元测试（7 个维度）：模板替换基础、极端内容、错误恢复、并发安全、幂等性、与其他 patch 不冲突、Python LOAD_GLOBAL 语义验证
+- API 端到端测试脚本（19 个用例）：基础功能、重启持久化、并发/稳定性、回归验证
+- 嵌入模式验证：直接调用 `apply_prompt_template()` 确认 prompt 含东方亿盟角色定义
+
+### 连带修复：duplicate middleware 问题
+
+**根因**：`sitecustomize.py` 用 `from patch_manager import apply_all`（`sys.modules['patch_manager']`），而 `app.py` 用 `from deerflow_extensions.patch_manager import apply_all`（`sys.modules['deerflow_extensions.patch_manager']`），Python 视为两个不同模块对象，`_APPLIED` 幂等保护失效，导致 SensitiveWordMiddleware 被注入两次。
+
+**修复**：
+- `sitecustomize.py`、`deerflow_entry.py` 统一为 `from deerflow_extensions.patch_manager import apply_all`
+- `_patch_sensitive_word()` 加 `isinstance` 双重守卫
+
+### 验证
+```bash
+grep "TopicGuardrail.*Patches:" logs/gateway.log     # ✅ 应含 3 个 ✅
+grep "SYSTEM_PROMPT_TEMPLATE updated" logs/gateway.log  # 角色注入成功
+cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python3 \
+  -m pytest ../deerflow_extensions/topic_guardrail/tests/test_role_injection_fix.py -v  # 25/25
+```

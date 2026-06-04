@@ -14,7 +14,7 @@
 | **ads_auth**（ADS 统一认证） | `app.py` + `auth_middleware.py` + `csrf_middleware.py` + `deps.py` + `docker-compose-dev.yaml` + `next.config.js` + `middleware.ts` + `types.ts` + `.env.example` | ✅ 低 | 9 个核心 |
 | **settings-dialog-ext**（SettingsDialog 扩展架构 + ADS 账号适配） | `settings-dialog.tsx` + `registry.ts` + `workspace-nav-menu.tsx` + `app.py` + `account-settings-page.tsx` | ✅ 低 | 4 个前端 + 1 个后端 |
 | **input-suggestions**（输入建议按钮自定义） | `input-box.tsx`（2 行 import + 渲染改用动态注册）+ `registry.ts` + `config.ts` | ✅ 极低 | **1 个前端核心 + 2 个扩展** |
-| **topic_guardrail**（回答范围限制） | `deerflow_entry.py`（3 个 patch 块 + 路径检测修复）+ `sitecustomize.py`（2 个 patch 块，扩展目录） | ✅ 低 | **1 个核心 + 2 个扩展** |
+| topic_guardrail（回答范围限制） | `app.py`（1 个 try/except 注入块）+ `deerflow_entry.py`（1 行调用）+ `patch_manager.py`（扩展目录）| ✅ 低 | **2 个核心 + 1 个扩展** |
 
 两条原则：
 1. 所有注入代码都是 `try/except ImportError` 包起来的——即使扩展不可用，DeerFlow 正常运行
@@ -26,7 +26,7 @@
 
 | 模块 | 文件 | 包含补丁 | 说明 |
 |------|------|---------|------|
-| **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1, T3, T4 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`prompt.py`、`sitecustomize.py`、`deerflow_entry.py` |
+| **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1, T5, T6 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`deerflow_entry.py`、`patch_manager.py` |
 | **前端** | [frontend.md](frontend.md) | A6, A7, A8, S1, S2, S3, S4, IS1 | `next.config.js`、`middleware.ts`、`types.ts`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx`、`account-settings-page.tsx`、`input-box.tsx` |
 | **Docker** | [docker.md](docker.md) | D2, D3, A4 | `docker-compose-dev.yaml`、`docker-compose.yaml` |
 | **脚本** | [scripts.md](scripts.md) | D4, D5, A5 | `entrypoint.sh`、`sitecustomize.py` |
@@ -122,26 +122,41 @@ grep -c "修改密码表单被隐藏" frontend/src/components/workspace/settings
 echo "=== B1: app.py env_settings ==="
 grep -n "env_settings" backend/app/gateway/app.py
 
-echo "=== T1: prompt.py 已回退到官方版本（角色定义在 role_definition.txt）==="
+echo "=== T1: prompt.py 已回退到官方版本（角色定义在 role_definition.txt）===
 grep -n "open-source super agent" backend/packages/harness/deerflow/agents/lead_agent/prompt.py
 
-echo "=== T2: sitecustomize.py SensitiveWordMiddleware ==="
-grep -n "SensitiveWordMiddleware\|_patched_build" deerflow_extensions/sitecustomize.py
+echo "=== T5: patch_manager.py 集中管理 ==="
+grep -n "apply_all\|_patch_sensitive_word\|_patch_immutable_constraint\|_patch_role" deerflow_extensions/patch_manager.py | head -5
 
-echo "=== T3: sitecustomize.py 角色外部化 ==="
-grep -n "_patched_apply\|role_definition.txt" deerflow_extensions/sitecustomize.py
+echo "=== T6: app.py topic_guardrail 注入块 ==="
+grep -n "TopicGuardrail\|apply_all" backend/app/gateway/app.py
 
-echo "=== T3a: role_definition.txt ==="
+echo "=== T6a: patch_role 模板替换（不再 monkeypatch 函数）==="
+grep -n "SYSTEM_PROMPT_TEMPLATE = new_template" deerflow_extensions/patch_manager.py
+
+echo "=== T5a: sitecustomize.py 委托 apply_all ==="
+grep -n "apply_all" deerflow_extensions/sitecustomize.py
+
+echo "=== T5b: deerflow_entry.py 委托 apply_all ==="
+grep -n "TopicGuardrail\|apply_all" backend/deerflow_entry.py
+
+echo "=== T5c: role_definition.txt ==="
 ls -la deerflow_extensions/topic_guardrail/role_definition.txt
 
-echo "=== T3b: 单元测试 ==="
-python -m pytest deerflow_extensions/topic_guardrail/tests/test_role_externalization.py -v
+echo "=== T5d: 启动日志确认 ==="
+grep "TopicGuardrail.*Patches:" logs/gateway.log
 
-echo "=== T4: deerflow_entry.py TopicGuardrail 注入 ==="
-grep -n "TopicGuardrail extensions\|_patched_build\|_patched_skills_section\|_patched_apply" backend/deerflow_entry.py | head -5
+echo "=== T6d: 新暴力测试（25个单元测试） ==="
+cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python3 -m pytest ../deerflow_extensions/topic_guardrail/tests/test_role_injection_fix.py -v 2>&1 | tail -5
 
-echo "=== T4a: deerflow_entry.py _ext_internal 路径修复 ==="
-grep -n "_ext_candidates\|_internal_dir" backend/deerflow_entry.py
+echo "=== T6e: sitecustomize import 路径统一 ==="
+grep -n "deerflow_extensions.patch_manager" deerflow_extensions/sitecustomize.py
+
+echo "=== T6f: deerflow_entry import 路径统一 ==="
+grep -n "deerflow_extensions.patch_manager" backend/deerflow_entry.py
+
+echo "=== T6g: SensitiveWordMiddleware isinstance 守卫 ==="
+grep -n "isinstance.*SensitiveWordMiddleware" deerflow_extensions/patch_manager.py
 
 echo "=== IS1: input-box.tsx 扩展 import ==="
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/input-box.tsx
