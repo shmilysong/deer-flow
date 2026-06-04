@@ -10,7 +10,10 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.runtime import Runtime
 
-from text_preprocessor import preprocess
+try:
+    from topic_guardrail.text_preprocessor import preprocess
+except ImportError:
+    from text_preprocessor import preprocess
 
 logger = logging.getLogger(__name__)
 
