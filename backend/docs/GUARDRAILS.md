@@ -574,7 +574,34 @@ PYTHONPATH=backend/packages/harness:deerflow_extensions uv run --directory backe
   python3 -m pytest deerflow_extensions/topic_guardrail/tests/test_sensitive_word_middleware.py -v
 ```
 
+### v7 纵深防御升级（2026-06-04）
+
+SensitiveWordMiddleware 从基础关键词匹配升级为完整纵深防御体系，解决 v5 的已知局限：
+
+**v7 新增组件**：
+
+| 组件 | 功能 |
+|------|------|
+| `text_preprocessor.py` | 文本预处理管道：NFC归一化 → 零宽字符清除 → 全角→半角 → 空格压缩 → 单字母间隙压缩 → lowercase |
+| 审计日志 | 每次拒绝记录 `AUDIT|BLOCKED|reason=...|ts=...` |
+
+**Fail-Closed 加固**：
+- `_automaton is None` → CRITICAL 日志 + 拒绝所有输入
+- 任意异常 → exception 日志 + 拒绝所有输入
+- 彻底解决 `except AttributeError: pass` 导致敏感词检测静默失效的问题
+
+**词库补全**：
+`custom_sensitive_words.txt` 合并政治人物及拼音/英文变体（原 `pinyin_variants.txt` 已删除，内容合并至此）。
+
+**L1 角色硬约束**（`role_definition.txt` 追加）：
+```
+🚨 STRICTLY FORBIDDEN — 严格禁止：
+- 不得以任何政治人物、政治组织名称命名模板、分区、终端或任何系统对象
+- 如果用户的请求中涉及上述内容，直接回复"已被系统拒绝"
+- 不做任何解释，不追问，不确认
+```
+
 ### 已知局限
 
-单字词（"法""党""帝"等46个）已从基础词库中过滤以减少误杀。如需恢复，请添加到 `custom_sensitive_words.txt`。变形绕过（谐音/拼音/拆字/繁简体）是关键词匹配的天生局限，后续可考虑添加 Qwen3Guard 语义审核。
+单字词（"法""党""帝"等46个）已从基础词库中过滤以减少误杀。如需恢复，请添加到 `custom_sensitive_words.txt`。
 ```

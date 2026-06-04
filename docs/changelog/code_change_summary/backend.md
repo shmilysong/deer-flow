@@ -576,3 +576,33 @@ cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python
 ```bash
 python3 -m pytest .../test_boot_loader.py -v  # 26/26
 ```
+
+---
+
+## 13. 2026-06-04: 敏感词检测纵深防御（v7）
+
+### 变更范围
+全部在 `deerflow_extensions/topic_guardrail/` 扩展目录，零核心源码侵入。
+
+### 新增文件
+- `text_preprocessor.py` — 输入文本预处理模块
+- `wordlist/pinyin_variants.txt` — 拼音/英文变体黑名单
+- `tests/test_text_preprocessor.py` — 17 个单元测试
+- `tests/test_sensitive_word_middleware.py` — 14 个单元测试
+- `tests/test_sensitive_word_bypass.py` — 34 个暴力测试用例
+- `tests/run_violent_tests.sh` — API 批量测试脚本
+
+### 核心改动
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| Fail-Closed 加固 | `sensitive_word_middleware.py` | `except AttributeError: pass` → `except Exception: return True`；`_automaton is None` → CRITICAL 日志 + 拒绝 |
+| TextPreprocessor 集成 | `sensitive_word_middleware.py` + `text_preprocessor.py` | NFC归一化→零宽清除→全角→半角→空格压缩→单字母间隙压缩→lowercase→拼音检测 |
+| 拼音变体词源 | `_build_automaton()` 加第三词源 | 加载 `pinyin_variants.txt` |
+| 审计日志 | `_build_blocked()` | `AUDIT|BLOCKED|reason=...|ts=...` |
+| 语义审核 | `_semantic_check()` | 可选集成（默认关闭） |
+| L1 硬约束 | `role_definition.txt` | `STRICTLY FORBIDDEN` 禁止事项 |
+| 词库补全 | `custom_sensitive_words.txt` | 特朗普、川普、拜登等 |
+| 配置升级 | `topics.yaml` | `pinyin_variants`、`semantic_guard`、`audit` |
+
+### 测试结果
+65/65 全部通过，零误杀：全类绕过手法防御有效，正常 IT 问题完全不受影响。

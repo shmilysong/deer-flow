@@ -5,3 +5,5 @@ tool_control:
     base: wordlist/base_sensitive_words.txt
     custom: wordlist/custom_sensitive_words.txt
     whitelist: wordlist/whitelist.txt
+  audit:
+    log_blocked: true

@@ -18,3 +18,23 @@
 
 # 拼音变体（纯字母词，但明确有害）
 falungong
+
+# 拼音/英文变体敏感词（原 pinyin_variants.txt 合并至此）
+xijinping
+xi jin ping
+trump
+donald trump
+jinping
+xidada
+
+# === 政治人物（词库合并遗漏） ===
+特朗普
+川普
+拜登
+普京
+泽连斯基
+金正恩
+安倍晋三
+奥巴马
+克林顿
+希拉里

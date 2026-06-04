@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 import yaml
 import ahocorasick
@@ -8,6 +9,8 @@ from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.runtime import Runtime
+
+from text_preprocessor import preprocess
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,10 @@ class SensitiveWordMiddleware(AgentMiddleware[AgentState]):
 
     在 LLM 调用前（before_model）检查用户输入文本是否含敏感词。
     在 LLM 调用后（after_model）检查模型输出文本是否含敏感词。
+
+    架构：
+      TextPreprocessor → AC Automaton
+      Fail-closed: 任何异常均拒绝而非放行
     """
 
     name = "sensitive_word"
@@ -27,6 +34,7 @@ class SensitiveWordMiddleware(AgentMiddleware[AgentState]):
         self._base_dir = os.path.dirname(os.path.abspath(__file__))
         self._automaton = None
         self._whitelist: set[str] = set()
+        self._preprocessor = preprocess
 
         self._load_config(config_path)
         self._build_automaton()
@@ -65,7 +73,7 @@ class SensitiveWordMiddleware(AgentMiddleware[AgentState]):
                         self._automaton.add_word(word, word)
                         count += 1
         self._automaton.make_automaton()
-        logger.info("SensitiveWord AC自动机构建完成，共 %d 个敏感词", count)
+        logger.info("SensitiveWord AC automaton built with %d words", count)
 
     def _load_whitelist(self):
         rel_path = self._wordlist_cfg.get("whitelist")
@@ -90,14 +98,18 @@ class SensitiveWordMiddleware(AgentMiddleware[AgentState]):
         return False
 
     def _has_sensitive(self, text: str) -> bool:
-        if not text or self._automaton is None:
+        if not text:
             return False
+        if self._automaton is None:
+            logger.critical("SensitiveWord AC automaton is None — blocking all input!")
+            return True
         try:
             for _, word in self._automaton.iter(text):
                 if not self._is_whitelisted(word):
                     return True
-        except AttributeError:
-            pass
+        except Exception:
+            logger.exception("SensitiveWord AC automaton error — blocking")
+            return True
         return False
 
     def _get_last_user_message(self, state) -> str | None:
@@ -116,15 +128,22 @@ class SensitiveWordMiddleware(AgentMiddleware[AgentState]):
                 return str(content) if content else None
         return None
 
-    def _build_blocked(self) -> AIMessage:
-        refusal = "抱歉，您的输入包含不允许的内容。请提出公司业务或计算机技术相关的问题。"
+    def _build_blocked(self, reason: str = "sensitive_word") -> AIMessage:
+        logger.info("AUDIT|BLOCKED|reason=%s|ts=%s", reason, time.strftime("%Y-%m-%dT%H:%M:%S"))
+        refusal = "您的请求涉及不允许的内容，已被系统拒绝。"
         return AIMessage(content=refusal)
 
     def before_model(self, state: AgentState, runtime: Runtime) -> dict | None:
         text = self._get_last_user_message(state)
-        if text and self._has_sensitive(text):
-            logger.warning("SensitiveWord Input blocked: text=%.80s", text)
-            return {"messages": [self._build_blocked()]}
+        if not text:
+            return None
+
+        clean_text, _ = self._preprocessor(text)
+
+        if self._has_sensitive(clean_text):
+            logger.warning("SensitiveWord BLOCKED: text=%.80s", text)
+            return {"messages": [self._build_blocked(reason="ac_automaton")]}
+
         return None
 
     async def abefore_model(self, state: AgentState, runtime: Runtime) -> dict | None:
@@ -134,7 +153,7 @@ class SensitiveWordMiddleware(AgentMiddleware[AgentState]):
         text = self._get_last_ai_message(state)
         if text and self._has_sensitive(text):
             logger.warning("SensitiveWord Output blocked: text=%.80s", text)
-            return {"messages": [self._build_blocked()]}
+            return {"messages": [self._build_blocked(reason="ac_automaton_output")]}
         return None
 
     async def aafter_model(self, state: AgentState, runtime: Runtime) -> dict | None:

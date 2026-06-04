@@ -450,6 +450,66 @@ ls deerflow_extensions/env_settings/
 
 ---
 
+## 2026-06-04: T8 — 敏感词检测纵深防御（v7）
+
+### 变更概览
+所有改动在 `deerflow_extensions/topic_guardrail/` 扩展目录，**零核心源码侵入**。
+
+### 新增文件
+| 文件 | 说明 |
+|------|------|
+| `text_preprocessor.py` | 输入文本预处理（Unicode归一化、零宽字符清除、拼音检测、全角→半角、单字母间隙压缩） |
+| `wordlist/pinyin_variants.txt` | 拼音/英文变体敏感词（AC 自动机第三词源） |
+| `tests/test_text_preprocessor.py` | TextPreprocessor 17 个单元测试 |
+| `tests/test_sensitive_word_middleware.py` | Fail-closed 14 个单元测试 |
+| `tests/test_sensitive_word_bypass.py` | 暴力测试 34 个用例 |
+| `tests/run_violent_tests.sh` | API 批量暴力测试脚本 |
+
+### 修改文件
+| 文件 | 改动 |
+|------|------|
+| `sensitive_word_middleware.py` | Fail-closed 加固、引入 TextPreprocessor、审计日志、拼音变体词源加载 |
+| `topics.yaml` | 追加 `pinyin_variants`、`semantic_guard`、`audit` 配置块 |
+| `role_definition.txt` | 追加 `STRICTLY FORBIDDEN` 禁止事项清单 |
+| `wordlist/custom_sensitive_words.txt` | 追加政治人物缺失词条（特朗普、川普等） |
+
+### 核心改动
+
+1. **Fail-Closed**：`_has_sensitive()` 中 `except AttributeError: pass` → `except Exception: logger.exception(); return True`；`_automaton is None` → CRITICAL 日志 + return True
+2. **TextPreprocessor**：预处理管道（NFC归一化 → 零宽字符清除 → 全角→半角 → 空格压缩 → 单字母间隙压缩 → lowercase → 拼音检测）
+3. **拼音变体词源**：AC 自动机第三词源 `pinyin_variants.txt`
+4. **审计日志**：`AUDIT|BLOCKED|reason=...|ts=...`
+5. **语义审核**：可选集成（默认关闭，通过 `semantic_guard.enabled` 控制）
+6. **L1 硬约束**：`role_definition.txt` 追加 `STRICTLY FORBIDDEN`
+
+### 暴力测试结果
+65/65 测试通过，覆盖：
+- A 类（直接政治人物名）：7 用例 ✅
+- B 类（拼音/英文变体）：7 用例 ✅
+- D 类（语义包装）：3 用例 ✅
+- E 类（零宽字符绕过）：5 用例 ✅
+- F 类（Unicode 归一化）：2 用例 ✅
+- G 类（正常输入不应误杀）：7 用例 ✅
+- H 类（极端边界）：3 用例 ✅
+- Fail-Closed 单元测试：14 用例 ✅
+- TextPreprocessor 单元测试：17 用例 ✅
+
+### 验证命令
+```bash
+# 单元测试
+cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python3 \
+  -m pytest ../deerflow_extensions/topic_guardrail/tests/ -v
+# 预期: 65 passed
+
+# 文件存在性
+ls -la deerflow_extensions/topic_guardrail/text_preprocessor.py
+ls -la deerflow_extensions/topic_guardrail/wordlist/pinyin_variants.txt
+grep -c "特朗普" deerflow_extensions/topic_guardrail/wordlist/custom_sensitive_words.txt
+grep -c "STRICTLY FORBIDDEN" deerflow_extensions/topic_guardrail/role_definition.txt
+
+
+---
+
 ## 2026-06-02: TopicGuardrail v4 — prompt.py 角色身份重定义
 
 > ⚠️ **已废弃**：v6 已将角色定义外部化为 `role_definition.txt`，prompt.py 只保留编译时默认值。
