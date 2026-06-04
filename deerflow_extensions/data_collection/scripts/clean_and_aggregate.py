@@ -47,35 +47,45 @@ class DataCleaner:
         return result
 
     @staticmethod
-    def filter_short_response(samples: list[dict], min_chars: int = 5) -> list[dict]:
-        """Filter out samples whose raw_response is shorter than min_chars."""
-        result: list[dict] = []
+    def tag_short_response(samples: list[dict], min_chars: int = 5) -> list[dict]:
+        """Tag samples with short_reply=True instead of discarding."""
         for s in samples:
             raw = s.get("raw_response", "") or ""
             if len(raw) < min_chars:
-                continue
-            result.append(s)
-        return result
+                s["short_reply"] = True
+        return samples
 
     @staticmethod
-    def filter_error_cases(samples: list[dict]) -> list[dict]:
-        """Filter out samples with a non-empty error field."""
-        result: list[dict] = []
+    def tag_errors(samples: list[dict]) -> list[dict]:
+        """Tag samples with has_error=True for error records instead of discarding."""
         for s in samples:
             if s.get("error"):
-                continue
-            result.append(s)
-        return result
+                s["has_error"] = True
+        return samples
 
     @classmethod
-    def clean(cls, samples: list[dict]) -> list[dict]:
-        """Run the full cleaning pipeline: incomplete → dedup → short → errors."""
-        s = samples[:]
-        s = cls.filter_incomplete(s)
+    def process(cls, samples: list[dict]) -> tuple[list[dict], list[dict]]:
+        """Tag and route samples into clean (trainable) and flagged (analysis) streams.
+
+        Returns:
+            (clean, flagged):  clean samples for training, flagged samples
+            for Bad Case / quality analysis. All flagged records are preserved.
+        """
+        s = cls.filter_incomplete(samples[:])
         s = cls.deduplicate(s)
-        s = cls.filter_short_response(s)
-        s = cls.filter_error_cases(s)
-        return s
+        s = cls.tag_short_response(s)
+        s = cls.tag_errors(s)
+
+        clean: list[dict] = []
+        flagged: list[dict] = []
+
+        for record in s:
+            if record.get("has_error") or record.get("short_reply"):
+                flagged.append(record)
+            else:
+                clean.append(record)
+
+        return clean, flagged
 
 
 class DataAggregator:
@@ -212,15 +222,16 @@ def run_daily_pipeline(date_str: str | None = None) -> dict[str, Any]:
     raw_count = len(raw_samples)
 
     cleaner = DataCleaner()
-    cleaned = cleaner.clean(raw_samples)
-    cleaned_count = len(cleaned)
+    clean_samples, flagged_samples = cleaner.process(raw_samples)
+    cleaned_count = len(clean_samples)
+    flagged_count = len(flagged_samples)
 
     aggregator = DataAggregator()
-    training_samples = aggregator.aggregate_session(cleaned)
+    training_samples = aggregator.aggregate_session(clean_samples)
     train_sample_count = len(training_samples)
 
     categories: dict[str, int] = defaultdict(int)
-    for s in cleaned:
+    for s in clean_samples:
         st = s.get("sample_type", "unknown")
         categories[st] += 1
 
@@ -230,12 +241,36 @@ def run_daily_pipeline(date_str: str | None = None) -> dict[str, Any]:
         for ts in training_samples:
             f.write(json.dumps(ts, ensure_ascii=False) + "\n")
 
+    if flagged_samples:
+        flagged_output_dir = os.path.join(base_dir, "flagged", date_str)
+        flagged_output_path = os.path.join(flagged_output_dir, "flagged_data.jsonl")
+        os.makedirs(flagged_output_dir, exist_ok=True)
+        with open(flagged_output_path, "w", encoding="utf-8") as f:
+            for rec in flagged_samples:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    error_tag_counts: dict[str, int] = {}
+    short_reply_count = 0
+    for rec in flagged_samples:
+        if rec.get("has_error"):
+            error_type = rec.get("error", "unknown")
+            error_tag_counts[error_type] = error_tag_counts.get(error_type, 0) + 1
+        if rec.get("short_reply"):
+            short_reply_count += 1
+
     stats = {
         "date": date_str,
         "raw_count": raw_count,
         "cleaned_count": cleaned_count,
+        "flagged_count": flagged_count,
         "train_sample_count": train_sample_count,
         "categories": dict(categories),
+        "flagged": {
+            "total": flagged_count,
+            "short_reply": short_reply_count,
+            "error_count": sum(error_tag_counts.values()),
+            "error_breakdown": error_tag_counts,
+        },
     }
     with open(stats_path, "w", encoding="utf-8") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
