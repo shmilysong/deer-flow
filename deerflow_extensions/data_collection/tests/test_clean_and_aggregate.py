@@ -92,42 +92,61 @@ class TestDataCleaner:
         result = DataCleaner.filter_incomplete(samples)
         assert len(result) == 1
 
-    def test_filter_short_response_default_min(self):
-        samples = [
-            make_raw(raw_response="Hi"),
-            make_raw(raw_response="Hello, how can I help you today?"),
-        ]
-        result = DataCleaner.filter_short_response(samples)
-        assert len(result) == 1
-        assert result[0]["raw_response"] == "Hello, how can I help you today?"
-
-    def test_filter_short_response_custom_min(self):
-        samples = [
-            make_raw(raw_response="Hello"),
-            make_raw(raw_response="Hi there! This is a longer response."),
-        ]
-        result = DataCleaner.filter_short_response(samples, min_chars=10)
-        assert len(result) == 1
-        assert "longer" in result[0]["raw_response"]
-
-    def test_filter_short_response_empty_string(self):
-        samples = [
-            make_raw(raw_response=""),
-            make_raw(raw_response="Hello"),
-        ]
-        result = DataCleaner.filter_short_response(samples)
-        assert len(result) == 1
-
-    def test_filter_error_cases_removes_samples_with_error(self):
+    def test_tag_errors_tags_not_discards(self):
         samples = [
             make_raw(error="APIError: timeout"),
             make_raw(error=""),
             make_raw(error=None),
         ]
-        result = DataCleaner.filter_error_cases(samples)
-        assert len(result) == 2
+        result = DataCleaner.tag_errors(samples)
+        assert len(result) == 3
+        assert result[0]["has_error"] is True
+        assert result[0]["error"] == "APIError: timeout"
+        assert "has_error" not in result[1]
+        assert "has_error" not in result[2]
 
-    def test_clean_pipeline(self):
+    def test_tag_errors_preserves_other_fields(self):
+        samples = [make_raw(error="timeout", user_query="q", raw_response="r", session_id="s1")]
+        result = DataCleaner.tag_errors(samples)
+        assert result[0]["user_query"] == "q"
+        assert result[0]["raw_response"] == "r"
+        assert result[0]["session_id"] == "s1"
+
+    def test_tag_errors_idempotent(self):
+        samples = [make_raw(error="timeout")]
+        result1 = DataCleaner.tag_errors(samples)
+        result2 = DataCleaner.tag_errors(result1)
+        assert len(result1) == len(result2)
+
+    def test_tag_short_response_tags_not_discards(self):
+        samples = [
+            make_raw(raw_response="Hi"),
+            make_raw(raw_response="Hello, how can I help you today?"),
+        ]
+        result = DataCleaner.tag_short_response(samples)
+        assert len(result) == 2
+        assert result[0]["short_reply"] is True
+        assert "short_reply" not in result[1]
+
+    def test_tag_short_response_boundary(self):
+        samples = [
+            make_raw(raw_response="Hell"),
+            make_raw(raw_response="Hello"),
+        ]
+        result = DataCleaner.tag_short_response(samples)
+        assert result[0]["short_reply"] is True
+        assert "short_reply" not in result[1]
+
+    def test_tag_short_response_empty_custom_min(self):
+        samples = [
+            make_raw(raw_response="Short"),
+            make_raw(raw_response="A longer reply here"),
+        ]
+        result = DataCleaner.tag_short_response(samples, min_chars=10)
+        assert result[0]["short_reply"] is True
+        assert "short_reply" not in result[1]
+
+    def test_process_routes_correctly(self):
         samples = [
             make_raw(error="timeout"),
             make_raw(user_query="", raw_response="Hi"),
@@ -136,9 +155,41 @@ class TestDataCleaner:
             make_raw(user_query="How", raw_response="A"),
             make_raw(user_query="Bye", raw_response="Goodbye!"),
         ]
-        result = DataCleaner.clean(samples)
-        assert len(result) == 1
-        assert result[0]["raw_response"] == "Goodbye!"
+        clean, flagged = DataCleaner.process(samples)
+        assert len(clean) == 1
+        assert clean[0]["raw_response"] == "Goodbye!"
+        assert len(flagged) == 3  # error + "Hi"(short) + "A"(short)
+        flagged_responses = [r["raw_response"] for r in flagged]
+        assert "A" in flagged_responses
+        assert any(r.get("has_error") for r in flagged)
+
+    def test_process_no_flagged(self):
+        samples = [
+            make_raw(user_query="Hello", raw_response="Hi there, how can I help?"),
+            make_raw(user_query="Bye", raw_response="Goodbye, see you later!"),
+        ]
+        clean, flagged = DataCleaner.process(samples)
+        assert len(clean) == 2
+        assert len(flagged) == 0
+
+    def test_process_all_flagged(self):
+        samples = [
+            make_raw(error="timeout"),
+            make_raw(user_query="Hmm", raw_response="Hmm"),
+        ]
+        clean, flagged = DataCleaner.process(samples)
+        assert len(clean) == 0
+        assert len(flagged) == 2
+
+    def test_process_double_tagged(self):
+        samples = [
+            make_raw(error="timeout", user_query="q", raw_response="err"),
+        ]
+        clean, flagged = DataCleaner.process(samples)
+        assert len(clean) == 0
+        assert len(flagged) == 1
+        assert flagged[0]["has_error"] is True
+        assert flagged[0]["short_reply"] is True
 
 
 class TestDataAggregator:
