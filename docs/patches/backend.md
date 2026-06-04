@@ -647,3 +647,77 @@ cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python
 grep "TopicGuardrail.*Patches:" logs/gateway.log
 grep "SYSTEM_PROMPT_TEMPLATE updated" logs/gateway.log
 ```
+
+---
+
+## 2026-06-04: T7 — Boot Loader 统一扩展注入 (deerflow_extensions/boot.py)
+
+### `boot.py` — 新增统一 Boot Loader
+
+**文件**: `deerflow_extensions/boot.py` **[NEW]**
+**风险**: ✅ 零（全在扩展目录）
+
+**背景**: 4 个扩展（data_collection、ads_auth、env_settings、topic_guardrail）的注入逻辑分散在 `app.py`（50+ 行重复 try/except）和 `deerflow_entry.py`（5 行）中，维护困难、容易遗漏。
+
+**改动**: 新增 `boot.py` 提供两个公开入口：
+- `boot_all_extensions(app=None)` — 按序加载全部 4 个扩展，各扩展自身的 `_installed`/`_APPLIED` 保证幂等
+- `boot_topic_guardrail_early(ext_internal)` — PyInstaller 专用，在 `import app` 之前注入 topic_guardrail
+
+### `app.py` — 注入逻辑精简
+
+**文件**: `backend/app/gateway/app.py`
+**风险**: ✅ 低
+
+**改动**:
+- **删除** L45-L58：data_collection 独立注入块（14 行）
+- **删除** L337-L380：ads_auth + env_settings + topic_guardrail 独立注入块（43 行）
+- **新增** L337-L350：统一调用 `boot_all_extensions(app=app)` ≈ 12 行
+
+净效果：app.py 减少约 45 行重复代码。
+
+**2026-06-04 修复**：Boot Loader 代码块内使用 `sys.path` 但缺少 `import sys`，导致 `NameError: name 'sys' is not defined`。已添加 `import sys as _sys` 并用 `_sys.path` 引用。
+
+### `deerflow_entry.py` — 精简为 boot_topic_guardrail_early
+
+**文件**: `backend/deerflow_entry.py`
+**风险**: ✅ 低
+
+**改动**: `from deerflow_extensions.patch_manager import apply_all; apply_all(...)` → `from deerflow_extensions.boot import boot_topic_guardrail_early; boot_topic_guardrail_early(_ext_internal)`
+
+### `entrypoint.sh` — 移除 sitecustomize symlink
+
+**文件**: `deerflow_extensions/entrypoint.sh`
+**风险**: ✅ 低
+
+**改动**:
+- **删除** L15-L17：`ln -s .../sitecustomize.py` 符号链接
+- **新增** L14：`python3 -c ... boot_all_extensions()` 直接调用
+
+### 删除死代码
+
+**文件**: `deerflow_extensions/sitecustomize.py`、`ads_auth/sitecustomize.py`、`data_collection/sitecustomize.py` — **全部删除**
+**风险**: ✅ 零（均从未被 Gateway 主进程加载）
+
+### 业况最佳实践
+
+CPython 官方文档明确 `sitecustomize.py` 用于**系统级全站自定义**（如企业环境统一配置），不适合作为项目扩展注入入口。本项目改用统一 Boot Loader 模式，与 Django/Flask 的 `AppConfig.ready()`、Spring Boot 的 `@ComponentScan` 等主流框架的扩展加载机制一致。
+
+**验证命令**:
+```bash
+# === T7: boot.py 存在 ===
+ls -la deerflow_extensions/boot.py
+
+# === T7a: app.py 调用 boot_all_extensions ===
+grep -n "boot_all_extensions" backend/app/gateway/app.py
+
+# === T7b: deerflow_entry.py 调用 boot_topic_guardrail_early ===
+grep -n "boot_topic_guardrail_early" backend/deerflow_entry.py
+
+# === T7c: sitecustomize 已删除 ===
+ls deerflow_extensions/sitecustomize.py 2>&1 | grep "No such file"
+ls deerflow_extensions/ads_auth/sitecustomize.py 2>&1 | grep "No such file"  
+ls deerflow_extensions/data_collection/sitecustomize.py 2>&1 | grep "No such file"
+
+# === T7d: entrypoint.sh 不再有 sitecustomize symlink ===
+grep -n "sitecustomize" deerflow_extensions/entrypoint.sh 2>/dev/null || echo "sitecustomize 已清除"
+```

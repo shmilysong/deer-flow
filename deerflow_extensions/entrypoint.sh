@@ -11,10 +11,8 @@ if [ ! -e /app/backend/.venv/lib/python3.12/site-packages/deerflow_extensions ];
     ln -s /app/deerflow_extensions /app/backend/.venv/lib/python3.12/site-packages/deerflow_extensions
 fi
 
-# Create sitecustomize.py for auto-injection (if not exists)
-if [ ! -e /app/backend/.venv/lib/python3.12/site-packages/sitecustomize.py ]; then
-    ln -s /app/deerflow_extensions/sitecustomize.py /app/backend/.venv/lib/python3.12/site-packages/sitecustomize.py
-fi
+# Boot extensions (replaces sitecustomize.py symlink)
+PYTHONPATH=/app:. python3 -c "from deerflow_extensions.boot import boot_all_extensions; boot_all_extensions()"
 
 # Start LangGraph
 allow_blocking=''

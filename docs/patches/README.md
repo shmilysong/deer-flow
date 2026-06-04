@@ -10,11 +10,12 @@
 
 | 扩展 | 改动文件 | 风险 | 数量 |
 |------|---------|------|------|
-| **data_collection**（蒸馏数据采集） | `app.py` + `docker-compose*.yaml` + `entrypoint.sh` + `sitecustomize.py` | ✅ 低 | 4 个核心 + 1 个扩展 |
+| **data_collection**（蒸馏数据采集） | `app.py` + `docker-compose*.yaml` + `entrypoint.sh` + `boot.py` | ✅ 低 | 4 个核心 + 1 个扩展 |
 | **ads_auth**（ADS 统一认证） | `app.py` + `auth_middleware.py` + `csrf_middleware.py` + `deps.py` + `docker-compose-dev.yaml` + `next.config.js` + `middleware.ts` + `types.ts` + `.env.example` | ✅ 低 | 9 个核心 |
 | **settings-dialog-ext**（SettingsDialog 扩展架构 + ADS 账号适配） | `settings-dialog.tsx` + `registry.ts` + `workspace-nav-menu.tsx` + `app.py` + `account-settings-page.tsx` | ✅ 低 | 4 个前端 + 1 个后端 |
 | **input-suggestions**（输入建议按钮自定义） | `input-box.tsx`（2 行 import + 渲染改用动态注册）+ `registry.ts` + `config.ts` | ✅ 极低 | **1 个前端核心 + 2 个扩展** |
-| topic_guardrail（回答范围限制） | `app.py`（1 个 try/except 注入块）+ `deerflow_entry.py`（1 行调用）+ `patch_manager.py`（扩展目录）| ✅ 低 | **2 个核心 + 1 个扩展** |
+| topic_guardrail（回答范围限制） | `app.py`（boot_all_extensions）+ `deerflow_entry.py`（boot_topic_guardrail_early）+ `boot.py`（扩展目录）| ✅ 低 | **2 个核心 + 1 个扩展** |
+| **Boot Loader**（扩展统一注入） | `app.py`（精简为 1 次调用）+ `deerflow_entry.py`（精简）+ `entrypoint.sh`（移除 sitecustomize） | ✅ 低 | **3 个核心精简** |
 
 两条原则：
 1. 所有注入代码都是 `try/except ImportError` 包起来的——即使扩展不可用，DeerFlow 正常运行
@@ -26,10 +27,10 @@
 
 | 模块 | 文件 | 包含补丁 | 说明 |
 |------|------|---------|------|
-| **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1, T5, T6 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`deerflow_entry.py`、`patch_manager.py` |
+| **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1, T5, T6, T7 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`deerflow_entry.py`、`boot.py` |
 | **前端** | [frontend.md](frontend.md) | A6, A7, A8, S1, S2, S3, S4, IS1 | `next.config.js`、`middleware.ts`、`types.ts`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx`、`account-settings-page.tsx`、`input-box.tsx` |
 | **Docker** | [docker.md](docker.md) | D2, D3, A4 | `docker-compose-dev.yaml`、`docker-compose.yaml` |
-| **脚本** | [scripts.md](scripts.md) | D4, D5, A5 | `entrypoint.sh`、`sitecustomize.py` |
+| **脚本** | [scripts.md](scripts.md) | D4 | `entrypoint.sh` |
 | **配置** | [config.md](config.md) | A9 | `.env.example` |
 
 ---
@@ -58,12 +59,14 @@ grep -n "deerflow_extensions" docker/docker-compose.yaml
 echo "=== D3b: volume training_logs (prod) ==="
 grep -n "training_logs" docker/docker-compose.yaml
 
-echo "=== D4a/D4b: entrypoint.sh 符号链接 ==="
+echo "=== D4a: entrypoint.sh 符号链接 ==="
 grep -n "ln -s" deerflow_extensions/entrypoint.sh
 
-echo "=== D5: sitecustomize.py ==="
-grep -c "install_data_collection" deerflow_extensions/sitecustomize.py
-grep -c "install_ads_auth" deerflow_extensions/sitecustomize.py
+echo "=== D4b: entrypoint.sh boot_all_extensions ==="
+grep -n "boot_all_extensions" deerflow_extensions/entrypoint.sh
+
+echo "=== D5: boot.py ==="
+ls -la deerflow_extensions/boot.py
 
 # === ads_auth 补丁 ===
 echo "=== A1: app.py ads_auth 注入 ==="
@@ -81,8 +84,8 @@ grep -n "login/ads" backend/app/gateway/csrf_middleware.py
 echo "=== A4: docker-compose ADS_BASE_URL ==="
 grep -n "ADS_BASE_URL\|ADS_MCP" docker/docker-compose-dev.yaml
 
-echo "=== A5: entrypoint.sh symlink ==="
-grep -n "sitecustomize" deerflow_extensions/entrypoint.sh
+echo "=== A5: boot.py ==="
+grep -n "boot_all_extensions" deerflow_extensions/entrypoint.sh
 
 echo "=== A6: beforeFiles rewrites ==="
 grep -n "beforeFiles" frontend/next.config.js
@@ -134,8 +137,8 @@ grep -n "TopicGuardrail\|apply_all" backend/app/gateway/app.py
 echo "=== T6a: patch_role 模板替换（不再 monkeypatch 函数）==="
 grep -n "SYSTEM_PROMPT_TEMPLATE = new_template" deerflow_extensions/patch_manager.py
 
-echo "=== T5a: sitecustomize.py 委托 apply_all ==="
-grep -n "apply_all" deerflow_extensions/sitecustomize.py
+echo "=== T5a: boot.py apply_all ==="
+grep -n "apply_all" deerflow_extensions/boot.py | head -3
 
 echo "=== T5b: deerflow_entry.py 委托 apply_all ==="
 grep -n "TopicGuardrail\|apply_all" backend/deerflow_entry.py
@@ -149,17 +152,34 @@ grep "TopicGuardrail.*Patches:" logs/gateway.log
 echo "=== T6d: 新暴力测试（25个单元测试） ==="
 cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python3 -m pytest ../deerflow_extensions/topic_guardrail/tests/test_role_injection_fix.py -v 2>&1 | tail -5
 
-echo "=== T6e: sitecustomize import 路径统一 ==="
-grep -n "deerflow_extensions.patch_manager" deerflow_extensions/sitecustomize.py
+echo "=== T6e: boot.py 统一入口 ==="
+grep -n "boot_one\|_EXTENSIONS" deerflow_extensions/boot.py | head -3
 
-echo "=== T6f: deerflow_entry import 路径统一 ==="
-grep -n "deerflow_extensions.patch_manager" backend/deerflow_entry.py
+echo "=== T6f: deerflow_entry.py 调用 boot_topic_guardrail_early ==="
+grep -n "boot_topic_guardrail_early" backend/deerflow_entry.py
 
 echo "=== T6g: SensitiveWordMiddleware isinstance 守卫 ==="
 grep -n "isinstance.*SensitiveWordMiddleware" deerflow_extensions/patch_manager.py
 
 echo "=== IS1: input-box.tsx 扩展 import ==="
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/input-box.tsx
+
+echo "=== T7: boot.py 统一 Boot Loader ==="
+ls -la deerflow_extensions/boot.py
+
+echo "=== T7a: app.py 调用 boot_all_extensions ==="
+grep -n "boot_all_extensions" backend/app/gateway/app.py
+
+echo "=== T7b: deerflow_entry.py 调用 boot_topic_guardrail_early ==="
+grep -n "boot_topic_guardrail_early" backend/deerflow_entry.py
+
+echo "=== T7c: sitecustomize 已全部删除 ==="
+ls deerflow_extensions/sitecustomize.py 2>&1 | grep "No such file"
+ls deerflow_extensions/ads_auth/sitecustomize.py 2>&1 | grep "No such file"
+ls deerflow_extensions/data_collection/sitecustomize.py 2>&1 | grep "No such file"
+
+echo "=== T7d: 启动日志 Boot Loader 注入验证 ==="
+grep "\[Boot\] Complete" logs/gateway.log 2>/dev/null || echo "日志未找到（服务尚未启动）"
 ```
 
 如果某个 grep 返回空，说明补丁被覆盖了，需要重新打上。

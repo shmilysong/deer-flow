@@ -15,7 +15,7 @@
 
 ## 安装方式
 
-所有插件通过 `deerflow_extensions/entrypoint.sh` 和 `deerflow_extensions/sitecustomize.py` 自动注入，无需手动安装。部署时确保：
+所有插件通过 `deerflow_extensions/boot.py` 统一 Boot Loader 自动注入（由 `app.py` lifespan 调用 `boot_all_extensions(app=app)`），无需手动安装。`sitecustomize.py` 机制已移除（CPython 文档明确其用于系统级全站自定义，不适合项目扩展注入）。部署时确保：
 
 1. `deerflow_extensions` 目录在 Python `sys.path` 中（Docker 通过 `PYTHONPATH=/app` + volume 挂载）
-2. `sitecustomize.py` 在 site-packages 中（Docker 通过 entrypoint.sh 创建符号链接）
+2. Docker LangGraph 进程通过 `entrypoint.sh` 直接调用 `boot_all_extensions()`（无需符号链接）

@@ -542,3 +542,37 @@ grep "SYSTEM_PROMPT_TEMPLATE updated" logs/gateway.log  # 角色注入成功
 cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python3 \
   -m pytest ../deerflow_extensions/topic_guardrail/tests/test_role_injection_fix.py -v  # 25/25
 ```
+
+---
+
+## 12. 2026-06-04: Boot Loader — 扩展注入统一入口
+
+### 问题背景
+- 4 个扩展的注入逻辑分散在 `app.py`（50+ 行重复 try/except）、`deerflow_entry.py`（5 行）、3 个 `sitecustomize.py`（含 2 个死代码）中
+- 每次加新扩展需在多处各写一份 sys.path + try/except 模板代码
+
+### 改动
+
+#### `deerflow_extensions/boot.py` — 新增统一 Boot Loader
+**风险**: ✅ 零（全在扩展目录）
+- `boot_all_extensions(app)` — 按序加载 data_collection → ads_auth → env_settings → topic_guardrail
+- `boot_topic_guardrail_early(ext_internal)` — PyInstaller 专用 pre-import 注入
+- 统一日志格式 `[Boot]`，统一 try/except 错误隔离
+
+#### `app.py` — 注入逻辑精简
+- 删除 57 行重复代码，改为 `boot_all_extensions(app=app)` 一次调用
+- **修复**：Boot Loader 代码块缺少 `import sys`，导致 `NameError`。已添加 `import sys as _sys`
+
+#### `deerflow_entry.py` — 精简
+- `from patch_manager import apply_all` → `from deerflow_extensions.boot import boot_topic_guardrail_early`
+
+#### `entrypoint.sh` — 移除 sitecustomize
+- 删除 `ln -s .../sitecustomize.py` symlink，改为 `python3 -c boot_all_extensions()` 直接调用
+
+#### 删除 3 个死 sitecustomize.py
+- `deerflow_extensions/sitecustomize.py`、`ads_auth/sitecustomize.py`、`data_collection/sitecustomize.py` — 全部删除（从未被 Gateway 主进程加载）
+
+### 验证
+```bash
+python3 -m pytest .../test_boot_loader.py -v  # 26/26
+```

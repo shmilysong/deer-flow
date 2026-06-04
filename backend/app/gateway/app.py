@@ -42,21 +42,6 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Data collection system (zero-injection, monkey-patch based)
-import os as _os
-import sys as _sys
-_ext_path = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
-if _ext_path not in _sys.path:
-    _sys.path.insert(0, _ext_path)
-try:
-    from deerflow_extensions.data_collection.startup import install_data_collection
-    install_data_collection()
-    logger.info("[DataCollection] System installed successfully at startup")
-except ImportError:
-    logger.warning("[DataCollection] Package not found, data collection is disabled")
-except Exception as _e:
-    logger.warning(f"[DataCollection] Install failed: {_e}")
-
 # Upper bound (seconds) each lifespan shutdown hook is allowed to run.
 # Bounds worker exit time so uvicorn's reload supervisor does not keep
 # firing signals into a worker that is stuck waiting for shutdown cleanup.
@@ -334,50 +319,22 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
         ],
     )
 
-    # —— Extension: ADS Auth (router only, no middleware) ——————————
-    # Registers the ADS login router. Does NOT add middleware —
-    # auth logic is inlined in AuthMiddleware itself.
-    import sys as _sys2
-    _ext_path2 = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
-    if _ext_path2 not in _sys2.path:
-        _sys2.path.insert(0, _ext_path2)
+    # —— Extension Boot Loader ————————————————————————————————————
+    # Delegates data_collection, ads_auth, env_settings, topic_guardrail
+    # injection to deerflow_extensions.boot.boot_all_extensions().
+    # Each extension's own _installed / _APPLIED guard prevents double-run.
+    import os as _os
+    import sys as _sys
+    _boot_root = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
+    if _boot_root not in _sys.path:
+        _sys.path.insert(0, _boot_root)
     try:
-        from deerflow_extensions.ads_auth.startup import install_ads_auth
-
-        install_ads_auth(app=app)
-        logger.info("[ADSAuth] System installed successfully at startup")
+        from deerflow_extensions.boot import boot_all_extensions
+        boot_all_extensions(app=app)
     except ImportError:
-        logger.warning("[ADSAuth] Package not found, ADS auth is disabled")
-    except Exception as _e2:
-        logger.warning(f"[ADSAuth] Install failed: {_e2}")
-
-    # —— Extension: Env Settings (multi-provider API router) —————
-    import sys as _sys3
-    _ext_path3 = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
-    if _ext_path3 not in _sys3.path:
-        _sys3.path.insert(0, _ext_path3)
-    try:
-        from deerflow_extensions.env_settings.startup import install_env_settings
-        install_env_settings(app=app)
-        logger.info("[EnvSettings] Multi-provider router installed")
-    except ImportError:
-        logger.warning("[EnvSettings] Extension not found")
-    except Exception as _e3:
-        logger.warning(f"[EnvSettings] Install failed: {_e3}")
-
-    # —— Extension: TopicGuardrail (role + sensitive word + immutable constraint) —
-    import sys as _sys4
-    _ext_path4 = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "..", ".."))
-    if _ext_path4 not in _sys4.path:
-        _sys4.path.insert(0, _ext_path4)
-    try:
-        from deerflow_extensions.patch_manager import apply_all
-        apply_all()
-        logger.info("[TopicGuardrail] All patches applied successfully")
-    except ImportError:
-        logger.warning("[TopicGuardrail] Package not found, topic guardrail is disabled")
-    except Exception as _e4:
-        logger.warning(f"[TopicGuardrail] Patch apply failed: {_e4}")
+        logger.warning("[Boot] deerflow_extensions not found, all extensions disabled")
+    except Exception as _boot_e:
+        logger.warning("[Boot] Extension boot failed: %s", _boot_e)
 
     # Auth: reject unauthenticated requests to non-public paths (fail-closed safety net)
     app.add_middleware(AuthMiddleware)

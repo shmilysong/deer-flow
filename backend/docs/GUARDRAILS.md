@@ -431,15 +431,15 @@ docs/GUARDRAILS.md           # This file
 
 **运行时覆盖机制（V6 架构升级）**：
 
-角色注入通过**三个入口**确保覆盖所有运行模式：
+角色注入通过 **`deerflow_extensions/boot.py` 统一 Boot Loader** 确保覆盖所有运行模式：
 
 | 入口 | 适用模式 | 触发方式 |
 |------|---------|---------|
-| `backend/app/gateway/app.py` | 本地开发 | try/except 调用 `patch_manager.apply_all()` |
-| `deerflow_extensions/sitecustomize.py` | Docker | CPython 自动加载（符号链接到 site-packages） |
-| `backend/deerflow_entry.py` | PyInstaller 打包 | 显式调用 `apply_all(ext_internal=...)` |
+| `backend/app/gateway/app.py` | 本地开发 + Docker Gateway | lifespan 内 `boot_all_extensions(app=app)` |
+| `backend/deerflow_entry.py` | PyInstaller 打包 | pre-import 阶段 `boot_topic_guardrail_early(ext_internal)` |
+| `deerflow_extensions/entrypoint.sh` | Docker LangGraph | `python3 -c` 直接调用 `boot_all_extensions()` |
 
-所有入口通过 `_APPLIED` 幂等保护，三者同时存在也不会重复执行。
+**已废弃** `sitecustomize.py`（CPython 文档明确此机制用于系统级全站自定义，不适合项目扩展注入）。
 
 **技术细节**：`_patch_role()` 采用**模板字符串替换**而非函数 monkeypatch——直接替换 `SYSTEM_PROMPT_TEMPLATE` 模块级变量。Python 函数通过 `LOAD_GLOBAL` 字节码每次动态查找模块全局变量，修改后所有调用者（不论如何导入）立即生效。免除函数 monkeypatch 在 `from X import Y` 模式下的导入时序脆弱性。
 
@@ -488,16 +488,23 @@ class SensitiveWordMiddleware(AgentMiddleware):
             return {"messages": [AIMessage(content="抱歉，您的输入包含不允许的内容。")]}
 ```
 
-**注入方式**：通过 `sitecustomize.py` 的 monkey-patch 注入到中间件链中（`_patched_build`），无需修改核心源码：
+**注入方式**：通过 `patch_manager.py` 的 `_patch_sensitive_word()` 注入到中间件链中，由 `boot.py` Boot Loader 统一触发：
 
 ```python
-def _patched_build(config, *args, **kwargs):
-    middlewares = _orig_build(config, *args, **kwargs)
-    middlewares.insert(-1, SensitiveWordMiddleware())
-    return middlewares
+def _patch_sensitive_word():
+    # from deerflow_extensions.topic_guardrail.sensitive_word_middleware import SensitiveWordMiddleware
+    # import deerflow.agents.lead_agent.agent as _agent_mw
+    _orig_build = _agent_mw._build_middlewares
 
-_agent_mw._build_middlewares = _patched_build
+    def _patched_build(config, *args, **kwargs):
+        middlewares = _orig_build(config, *args, **kwargs)
+        middlewares.insert(-1, SensitiveWordMiddleware())
+        return middlewares
+
+    _agent_mw._build_middlewares = _patched_build
 ```
+
+> **注意**：旧版通过 `sitecustomize.py` 注入的方式已废弃。`sitecustomize.py` 已被删除（CPython 文档明确其用于系统级全站自定义，不适用于项目扩展注入）。当前统一经由 `boot.py` Boot Loader 管理所有扩展注入。
 
 **白名单补偿**：即使敏感词库命中，如果匹配词在白名单中，仍然放行。防止公司业务词被误杀。
 
@@ -536,7 +543,7 @@ guardrails:
       config_path: deerflow_extensions/topic_guardrail/topics.yaml
 ```
 
-**SensitiveWordMiddleware** 通过 `sitecustomize.py` 自动注入，无需额外配置。
+**SensitiveWordMiddleware** 通过 `patch_manager.py` 自动注入（由 `boot.py` Boot Loader 统一触发），无需额外配置。
 
 **topics.yaml**（v5 已删除 `content_check_tools`）：
 

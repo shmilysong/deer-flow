@@ -43,15 +43,15 @@ Layer 4: TopicGuardrailProvider（GuardrailMiddleware，v5 简化）
 
 ## 集成方式
 
-通过三个入口注入，**完全零侵入 core 源码**：
+通过 `deerflow_extensions/boot.py` 统一 Boot Loader 注入，**完全零侵入 core 源码**：
 
 | 入口 | 适用模式 | 机制 |
 |------|---------|------|
-| `backend/app/gateway/app.py` | 本地开发 | try/except 调用 `patch_manager.apply_all()` |
-| `deerflow_extensions/sitecustomize.py` | Docker | CPython 自动加载（符号链接到 site-packages） |
-| `backend/deerflow_entry.py` | PyInstaller 打包 | 第 11 节显式调用 `apply_all(ext_internal=...)` |
+| `backend/app/gateway/app.py` | 本地开发 + Docker Gateway | lifespan 内 `boot_all_extensions(app=app)` |
+| `backend/deerflow_entry.py` | PyInstaller 打包 | pre-import 阶段 `boot_topic_guardrail_early(ext_internal)` |
+| `deerflow_extensions/entrypoint.sh` | Docker LangGraph | `python3 -c` 直接调用 `boot_all_extensions()` |
 
-所有入口通过 `_APPLIED` 幂等保护，三者同时存在也不会重复执行。
+所有入口 **不依赖 sitecustomize 机制**（sitecustomize.py 已被删除——CPython 文档明确其用于系统级全站自定义，不适合项目扩展注入）。各扩展自身的 `_installed`/`_APPLIED` 保证幂等。
 
 ### 角色注入机制（V6 架构升级）
 

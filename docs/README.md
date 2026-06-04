@@ -95,7 +95,7 @@
 | [backend.md](./patches/backend.md) | 后端核心源码补丁（app.py、auth_middleware.py、prompt.py 等） |
 | [frontend.md](./patches/frontend.md) | 前端核心源码补丁（middleware.ts、settings-dialog.tsx、input-box.tsx 等） |
 | [docker.md](./patches/docker.md) | Docker 核心源码补丁（docker-compose-dev.yaml 等） |
-| [scripts.md](./patches/scripts.md) | 脚本核心源码补丁（entrypoint.sh、sitecustomize.py 等） |
+| [scripts.md](./patches/scripts.md) | 脚本核心源码补丁（entrypoint.sh——sitecustomize 已替换为 boot.py） |
 | [config.md](./patches/config.md) | 配置核心源码补丁（.env.example 等） |
 
 ---

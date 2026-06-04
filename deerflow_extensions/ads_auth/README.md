@@ -24,8 +24,7 @@
 | `middleware.py` | `ADSProxyMiddleware` — FastAPI ASGI 中间件，唯一认证关口 |
 | `router.py` | `POST /api/v1/auth/login/ads` 登录端点 |
 | `token_manager.py` | 内存 token 存储 + 写 MCP config.json |
-| `startup.py` | 注入逻辑：`app.add_middleware()` + `app.include_router()` |
-| `sitecustomize.py` | Python 自启动入口，由 Python 解释器自动加载 |
+| `startup.py` | 注入逻辑：`app.include_router()` — 通过 `boot.py` Boot Loader 统一触发 |
 
 ## 环境变量
 
@@ -61,12 +60,12 @@ if getattr(request.state, "_ads_authenticated", False):
     return await call_next(request)
 ```
 
-## 安装
+## 集成方式
 
-自动通过 `sitecustomize.py` 注入，无需手动安装。部署时确保：
+通过 `deerflow_extensions/boot.py` 统一 Boot Loader 注入，**零核心源码侵入**。部署时确保：
 
 1. `deerflow_extensions` 目录在 Python `sys.path` 中（Docker 通过 `PYTHONPATH=/app` + volume 挂载）
-2. `sitecustomize.py` 在 site-packages 中（Docker 通过 entrypoint.sh 创建符号链接）
+2. 在 `app.py` lifespan 中调用 `boot_all_extensions(app=app)`（已集成，无需手动操作）
 
 ## 卸载
 

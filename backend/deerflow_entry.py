@@ -163,11 +163,11 @@ import deerflow.persistence.user
 import deerflow.persistence.user.model
 
 # =============================================================================
-# 11. TopicGuardrail extensions (delegated to patch_manager.py)
+# 11. TopicGuardrail extensions (delegated to boot.py)
 # =============================================================================
 try:
-    from deerflow_extensions.patch_manager import apply_all
-    apply_all(ext_internal=_ext_internal)
+    from deerflow_extensions.boot import boot_topic_guardrail_early
+    boot_topic_guardrail_early(_ext_internal)
 except Exception:
     pass
 

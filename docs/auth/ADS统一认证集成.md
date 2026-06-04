@@ -101,25 +101,11 @@ gateway:  # 和 langgraph 服务都需要
 | `middleware.py` | `ADSProxyMiddleware` — 唯一认证关口 |
 | `router.py` | `POST /api/v1/auth/login/ads` 端点 |
 | `token_manager.py` | token 内存存储 + 写 MCP config.json |
-| `startup.py` | 通过 `app.add_middleware()` + `app.include_router()` 注入 |
-| `sitecustomize.py` | Python 自启动入口 |
+| `startup.py` | 注入逻辑：`app.include_router()`（通过 `boot.py` Boot Loader 统一触发） |
 
-### 前置扩展（`deerflow_extensions/sitecustomize.py`）
+### 统一注入（`deerflow_extensions/boot.py`）
 
-合并加载 data_collection 和 ads_auth 两个扩展：
-
-```python
-try:
-    from deerflow_extensions.data_collection.startup import install_data_collection
-    install_data_collection()
-except Exception:
-    pass
-try:
-    from deerflow_extensions.ads_auth.startup import install_ads_auth
-    install_ads_auth()
-except Exception:
-    pass
-```
+所有扩展通过 Boot Loader 统一注入，由 `app.py` 的 `boot_all_extensions(app=app)` 自动完成。`sitecustomize.py` 机制已移除（CPython 文档明确其用于系统级全站自定义，不适合项目扩展注入）。详见 `@./deerflow_extensions/boot.py`。
 
 ### 前端扩展（`frontend/extensions/ads_auth/`）
 
@@ -242,5 +228,5 @@ if getattr(request.state, "_ads_authenticated", False):
 4. 删除 `frontend/middleware.ts`（桥接文件）
 5. 删除 `frontend/src/app/ads-login/` 目录（桥接文件）
 6. 删除 Docker 环境变量 `ADS_BASE_URL`、`ADS_MCP_CONFIG_PATH`
-7. 恢复 `entrypoint.sh` 中的 sitecustomize 链接
+7. 确保 `entrypoint.sh` 中调用 `boot_all_extensions()`（见 `deerflow_extensions/entrypoint.sh`）
 8. 重启服务

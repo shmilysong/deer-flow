@@ -199,7 +199,7 @@ Lead-agent middlewares are assembled in strict append order across `packages/har
 3. **SandboxMiddleware** - Acquires sandbox, stores `sandbox_id` in state
 4. **DanglingToolCallMiddleware** - Injects placeholder ToolMessages for AIMessage tool_calls that lack responses (e.g., due to user interruption), including raw provider tool-call payloads preserved only in `additional_kwargs["tool_calls"]`
 5. **LLMErrorHandlingMiddleware** - Normalizes provider/model invocation failures into recoverable assistant-facing errors before later middleware/tool stages run
-6. **GuardrailMiddleware** - Pre-tool-call authorization via pluggable `GuardrailProvider` protocol (optional, if `guardrails.enabled` in config). Evaluates each tool call and returns error ToolMessage on deny. Three provider options: built-in `AllowlistProvider` (zero deps), OAP policy providers (e.g. `aport-agent-guardrails`), or custom providers. Also includes `TopicGuardrailProvider` (deerflow_extensions) for L4 denied_tools-only tool check (v5 simplified, no longer does sensitive-word filtering). Sensitive-word input/output guardrails are now handled by `SensitiveWordMiddleware` (deerflow_extensions), injected via `sitecustomize.py` monkey-patch as an L2+L3 AgentMiddleware layer. See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for setup, usage, and how to implement a provider.
+6. **GuardrailMiddleware** - Pre-tool-call authorization via pluggable `GuardrailProvider` protocol (optional, if `guardrails.enabled` in config). Evaluates each tool call and returns error ToolMessage on deny. Three provider options: built-in `AllowlistProvider` (zero deps), OAP policy providers (e.g. `aport-agent-guardrails`), or custom providers. Also includes `TopicGuardrailProvider` (deerflow_extensions) for L4 denied_tools-only tool check (v5 simplified, no longer does sensitive-word filtering). Sensitive-word input/output guardrails are now handled by `SensitiveWordMiddleware` (deerflow_extensions), injected via `patch_manager.py` (triggered by `boot.py` Boot Loader) as an L2+L3 AgentMiddleware layer. See [docs/GUARDRAILS.md](docs/GUARDRAILS.md) for setup, usage, and how to implement a provider.
 7. **SandboxAuditMiddleware** - Audits sandboxed shell/file operations for security logging before tool execution continues
 8. **ToolErrorHandlingMiddleware** - Converts tool exceptions into error `ToolMessage`s so the run can continue instead of aborting
 9. **SummarizationMiddleware** - Context reduction when approaching token limits (optional, if enabled)
@@ -288,7 +288,7 @@ Proxied through nginx: `/api/langgraph/*` → Gateway LangGraph-compatible runti
 
 ### ADS 统一认证扩展 (`deerflow_extensions/ads_auth/`)
 
-通过 `sitecustomize.py` 自启动注入，替换原有 DeerFlow 本地认证。
+通过 `boot.py` Boot Loader 统一注入（`boot_all_extensions(app=app)`），替换原有 DeerFlow 本地认证。
 
 | 文件 | 说明 |
 |------|------|
@@ -681,7 +681,7 @@ See `docs/` directory for detailed documentation:
 | `ads_auth/` | ADS 统一认证 | Level 2 + 3 |
 | `data_collection/` | 蒸馏数据采集 | Level 3 |
 | `env_settings/` | 多厂商 API Key 管理 | Level 2 |
-| `topic_guardrail/` | 回答范围限制 + 角色定义外部化（编译后改 role_definition.txt 即可微调）<br>注入入口：`app.py`(dev) + `sitecustomize.py`(Docker) + `deerflow_entry.py`(PyInstaller)<br>角色替换机制：模板字符串替换 `SYSTEM_PROMPT_TEMPLATE`，而非函数 monkeypatch | Level 2 + 3 |
+| `topic_guardrail/` | 回答范围限制 + 角色定义外部化<br>注入入口：`boot.py` Boot Loader → `app.py`(dev) + `deerflow_entry.py`(PyInstaller) + `entrypoint.sh`(Docker LangGraph)<br>角色替换机制：模板字符串替换 `SYSTEM_PROMPT_TEMPLATE` | Level 2 + 3 |
 
 **改造完成后必须归档文档：**
 1. 扩展目录下创建 `README.md`
