@@ -93,14 +93,18 @@ All collected data is written under the `output_dir` (default: `/data/deerflow/t
 │   └── train_data_YYYYMMDD.jsonl   # Current day's buffered records
 ├── archive/
 │   └── train_data_YYYYMMDD_HHMMSS.jsonl  # Rotated files (>max_file_size_mb)
-└── aggregated/
+├── aggregated/
+│   └── YYYYMMDD/
+│       ├── train_data.jsonl         # Cleaned & aggregated training data
+│       └── stats.json               # Pipeline statistics
+└── flagged/
     └── YYYYMMDD/
-        ├── train_data.jsonl         # Cleaned & aggregated training data
-        └── stats.json               # Pipeline statistics
+        └── flagged_data.jsonl       # Error & short-reply records for Bad Case analysis
 ```
 
 - **daily/**: Incremental raw JSONL, one file per day. Automatically rotates to `archive/` when exceeding `max_file_size_mb`.
-- **aggregated/**: Output of `clean_and_aggregate.py`. Contains deduplicated, filtered, session-merged training samples in OpenAI messages format.
+- **aggregated/**: Output of `clean_and_aggregate.py`. Contains clean, deduplicated, session-merged training samples in OpenAI messages format.
+- **flagged/**: Tagged records (errors, short replies) routed for Bad Case analysis. Preserved in full for downstream analysis pipelines.
 
 ## Daily Pipeline
 
@@ -114,9 +118,10 @@ Schedule `clean_and_aggregate.py` via cron to transform daily raw logs into trai
 The pipeline performs:
 1. Filter incomplete records (missing session_id / user_query / raw_response)
 2. Deduplicate by (user_query + raw_response) MD5 hash
-3. Filter short responses (< 5 chars) and error cases
-4. Aggregate by session into OpenAI messages-format training samples
-5. Write `train_data.jsonl` and `stats.json` to `aggregated/YYYYMMDD/`
+3. Tag short responses (< 5 chars) and error cases for Bad Case analysis
+4. Route tagged records to `flagged/YYYYMMDD/flagged_data.jsonl`
+5. Aggregate clean samples into OpenAI messages-format training samples
+6. Write `train_data.jsonl` and `stats.json` (with enhanced `flagged` block) to `aggregated/YYYYMMDD/`
 
 ## Format Validation
 

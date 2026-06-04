@@ -60,6 +60,23 @@
 -- WRONG: `[arXiv:2502.19166]` - missing URL, will NOT render as link
 -- WRONG: `[Source]` - missing URL, will NOT render as link
 -
+
+## 2026-06-02: data_collection 过滤改分流标记
+
+### `clean_and_aggregate.py` — DataCleaner 架构升级
+
+**原因**: `filter_error_cases` 和 `filter_short_response` 直接丢弃错误/短回复数据，但这些数据是 Bad Case 分析的核心素材。
+
+**改动**:
+- `filter_error_cases()` → `tag_errors()` — 标记 `has_error=True` 而非丢弃
+- `filter_short_response()` → `tag_short_response()` — 标记 `short_reply=True` 而非丢弃
+- `clean()` → `process()` — 返回 `(clean, flagged)` 二元组实现数据分流
+- `run_daily_pipeline()` — 新增 `flagged/{date}/flagged_data.jsonl` 输出，stats 新增 `flagged` 统计块
+- `filter_incomplete` 和 `deduplicate` 保持不变
+
+**影响**: 错误和短回复数据不再丢失，可用于 Bad Case 分析管线。训练集数据质量不变（只有无标签的 clean 数据进训练集）。
+
+**测试覆盖**: 47 个单元测试（含 22 个新增暴力测试）全部通过。
 -**Rules:**
 -- Every citation MUST be a complete markdown link with URL: `[Title](https://...)`
 -- Write content naturally, add citation link at end of sentence/paragraph
