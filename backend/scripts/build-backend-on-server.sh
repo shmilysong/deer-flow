@@ -212,6 +212,9 @@ echo "[6/6] 编译 Gateway 二进制（耗时 5-15 分钟）..."
 ADD_DATA=""
 if [ -d "./deerflow_extensions" ]; then
     ADD_DATA="--add-data ./deerflow_extensions:deerflow_extensions"
+    # 独立映射 topic_guardrail 数据文件到模块路径（双重保障）
+    ADD_DATA="$ADD_DATA --add-data ./deerflow_extensions/topic_guardrail/topics.yaml:topic_guardrail/"
+    ADD_DATA="$ADD_DATA --add-data ./deerflow_extensions/topic_guardrail/wordlist:topic_guardrail/wordlist/"
 else
     echo "  ⚠️  未找到 deerflow_extensions，跳过附加数据目录"
 fi

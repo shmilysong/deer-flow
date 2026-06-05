@@ -623,3 +623,23 @@ python3 -m pytest .../test_boot_loader.py -v  # 26/26
 
 ### 测试结果
 65/65 全部通过，零误杀：全类绕过手法防御有效，正常 IT 问题完全不受影响。
+
+---
+
+## 14. 2026-06-04: PyInstaller 数据文件路径修复
+
+### 问题
+PyInstaller `--onedir` 模式下，模块在 `_internal/topic_guardrail/`，数据文件在 `_internal/deerflow_extensions/topic_guardrail/`，路径错位导致 `topics.yaml` 和 `wordlist/*.txt` 找不到，`SensitiveWordMiddleware` 初始化失败。
+
+### 修改
+| 文件 | 改动 |
+|------|------|
+| `sensitive_word_middleware.py` | `_load_config()` + `_resolve_word_path()` 增加 PyInstaller fallback |
+| `build-backend-on-server.sh` | 新增 2 行 `--add-data` 映射到模块路径 |
+
+### 修复策略（双重保障）
+- **方案 A（运行时 fallback）**：代码自动尝试 `deerflow_extensions/` 前缀路径
+- **方案 B（构建时 `--add-data`）**：编译时直接将数据文件映射到 `topic_guardrail/` 模块目录
+
+### 测试结果
+7/7 全部通过（PF01-PF04 路径 fallback + P01-P03/P06 功能回归）

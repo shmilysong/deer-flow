@@ -48,6 +48,17 @@ class SensitiveWordMiddleware(AgentMiddleware[AgentState]):
             config_path = os.path.join(self._base_dir, "topics.yaml")
         elif not os.path.isabs(config_path):
             config_path = os.path.join(self._base_dir, config_path)
+
+        if not os.path.isfile(config_path):
+            fallback = os.path.join(
+                os.path.dirname(self._base_dir),
+                "deerflow_extensions",
+                os.path.basename(self._base_dir),
+                os.path.basename(config_path),
+            )
+            if os.path.isfile(fallback):
+                config_path = fallback
+
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
         tc = config.get("tool_control", {})
@@ -57,7 +68,15 @@ class SensitiveWordMiddleware(AgentMiddleware[AgentState]):
         if not rel_path:
             return None
         path = os.path.join(self._base_dir, rel_path)
-        return path if os.path.isfile(path) else None
+        if os.path.isfile(path):
+            return path
+        fallback = os.path.join(
+            os.path.dirname(self._base_dir),
+            "deerflow_extensions",
+            os.path.basename(self._base_dir),
+            rel_path,
+        )
+        return fallback if os.path.isfile(fallback) else None
 
     def _build_automaton(self):
         self._automaton = ahocorasick.Automaton()

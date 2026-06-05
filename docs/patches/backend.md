@@ -510,6 +510,41 @@ grep -c "STRICTLY FORBIDDEN" deerflow_extensions/topic_guardrail/role_definition
 
 ---
 
+## 2026-06-04: T9 — PyInstaller 数据文件路径修复
+
+### 问题
+PyInstaller `--onedir` 模式下，Python 模块存放于 `_internal/topic_guardrail/`，但 `--add-data ./deerflow_extensions:deerflow_extensions` 将数据文件放到 `_internal/deerflow_extensions/topic_guardrail/`。`__file__` 解析到模块路径，导致 `topics.yaml` 和 `wordlist/*.txt` 找不到 → `FileNotFoundError` → patch 失败。
+
+### 修改文件
+| 文件 | 改动 |
+|------|------|
+| `deerflow_extensions/topic_guardrail/sensitive_word_middleware.py` | `_load_config()` + `_resolve_word_path()` 增加 PyInstaller fallback |
+| `backend/scripts/build-backend-on-server.sh` | 新增 2 行 `--add-data` 映射数据到模块路径 |
+
+### 核心改动
+
+1. **方案 A（运行时 fallback）**：`_load_config` 和 `_resolve_word_path` 在原始路径找不到时，自动尝试 `_internal/deerflow_extensions/topic_guardrail/` 路径
+2. **方案 B（构建时保障）**：build 脚本增加：
+   ```bash
+   --add-data ./deerflow_extensions/topic_guardrail/topics.yaml:topic_guardrail/
+   --add-data ./deerflow_extensions/topic_guardrail/wordlist:topic_guardrail/wordlist/
+   ```
+
+### 验证命令
+```bash
+# 单元测试
+cd backend && PYTHONPATH=.:../deerflow_extensions:packages/harness uv run python3 \
+  -m pytest ../deerflow_extensions/topic_guardrail/tests/test_pyinstaller_path_fix.py -v
+# 预期: 7 passed
+
+# 编译产物验证
+ls dist/deerflow-gateway/_internal/topic_guardrail/topics.yaml
+ls dist/deerflow-gateway/_internal/topic_guardrail/wordlist/
+```
+
+
+---
+
 ## 2026-06-02: TopicGuardrail v4 — prompt.py 角色身份重定义
 
 > ⚠️ **已废弃**：v6 已将角色定义外部化为 `role_definition.txt`，prompt.py 只保留编译时默认值。
