@@ -1,12 +1,20 @@
-import { KeyIcon } from "lucide-react";
+import { KeyIcon, MessageSquareIcon } from "lucide-react";
 
 import { registerSettingsExtension } from "@/core/settings-extensions";
 
-import { EnvSettingsPage } from "./env-settings-page";
+import { ProviderSettingsPage } from "./provider-settings-page";
+import { ChannelSettingsPage } from "./channel-settings-page";
 
 registerSettingsExtension({
   id: "api",
   label: "API Keys",
   icon: KeyIcon,
-  component: EnvSettingsPage,
+  component: ProviderSettingsPage,
+});
+
+registerSettingsExtension({
+  id: "channels",
+  label: "渠道配置",
+  icon: MessageSquareIcon,
+  component: ChannelSettingsPage,
 });

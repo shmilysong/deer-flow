@@ -829,3 +829,16 @@ export function MarkdownContent({
 移动端（`< 768px`）在聊天页左上角显示浮动汉堡按钮，点击后以 Sheet 抽屉形式打开左侧栏（历史对话列表 + 导航 + 设置）。按钮在侧栏打开时自动隐藏（`openMobile === true` → `return null`），桌面端完全不受影响。
 
 **配套补丁记录**: `docs/patches/frontend.md` → A11
+
+---
+
+## 2026-06-04: WeCom Bot 渠道配置
+
+### 零侵入扩展（合入 env-settings）
+
+**修改文件**:
+- `frontend/extensions/env-settings/api.ts` — 4 个函数 URL 改为 `/providers`，新增 4 个渠道 API
+- `frontend/extensions/env-settings/hooks.ts` — 新增 4 个渠道 hooks
+- `frontend/extensions/env-settings/types.ts` — 新增 3 个渠道类型
+- `frontend/extensions/env-settings/channel-settings-page.tsx` — **新文件**，独立渠道配置标签页
+- `frontend/extensions/env-settings/extension.ts` — 注册两个扩展（`api` + `channels`）

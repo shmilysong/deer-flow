@@ -57,6 +57,17 @@ WECOM_BOT_ID=your_bot_id
 WECOM_BOT_SECRET=your_bot_secret
 ```
 
+## 图形化配置（推荐）
+
+DeerFlow 提供了可视化的渠道配置页面，无需手动编辑 `.env` 文件：
+
+1. 打开 DeerFlow 设置面板 → **"渠道配置"** 标签页
+2. 输入企业微信 Bot ID 和 Bot Secret
+3. 点击 **"验证连通性"** 测试凭据可用性
+4. 点击 **"保存"** — 配置自动写入 `.env` 并热重启渠道
+
+此功能由 `env-settings` 扩展提供，后端 API 路径为 `/api/env-settings/channels/*`。保存配置时会自动启用渠道（修改 `config.yaml` 的 `channels.wecom.enabled: true`），清除配置时自动禁用。无需手动编辑 `config.yaml`。
+
 ## Docker 部署配置
 
 ```yaml

@@ -21,12 +21,23 @@ env_settings/
 
 FastAPI 路由模块，挂载于 `/api/env-settings` 前缀：
 
+### 厂商配置 (/api/env-settings/providers)
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/env-settings` | 读取所有厂商的当前配置（Key 已掩码） |
-| PUT | `/api/env-settings` | 更新指定厂商的 API Key、Base URL、Model，写入 `.env` 并注册到 `config.yaml` |
-| DELETE | `/api/env-settings/{provider}` | 清除指定厂商的 API_KEY、BASE_URL、MODEL，并从 `config.yaml` 移除对应模型 |
-| POST | `/api/env-settings/{provider}/verify` | 向该厂商 API 发送测试请求验证 Key 连通性 |
+| GET | `/api/env-settings/providers` | 读取所有厂商的当前配置（Key 已掩码） |
+| PUT | `/api/env-settings/providers` | 更新指定厂商的 API Key、Base URL、Model，写入 `.env` 并注册到 `config.yaml` |
+| DELETE | `/api/env-settings/providers/{provider}` | 清除指定厂商的配置，并从 `config.yaml` 移除对应模型 |
+| POST | `/api/env-settings/providers/{provider}/verify` | 向该厂商 API 发送测试请求验证 Key 连通性 |
+
+### 渠道配置 (/api/env-settings/channels)
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/env-settings/channels` | 读取渠道配置状态（凭据掩码 + 运行状态） |
+| PUT | `/api/env-settings/channels` | 保存渠道凭据（值不变跳过 + 输入裁剪 + Test-Before-Switch 安全重启 + 审计日志） |
+| DELETE | `/api/env-settings/channels/{channel}` | 清除渠道凭据（文件锁保护 + 同步热停止 + 内存清理 + 审计日志） |
+| POST | `/api/env-settings/channels/{channel}/verify` | 验证渠道连通性（WebSocket 连接测试 + 审计日志） |
 
 核心逻辑：
 
@@ -35,6 +46,11 @@ FastAPI 路由模块，挂载于 `/api/env-settings` 前缀：
 - **模型清理** — `_remove_models_from_config()` 删除该厂商在 `config.yaml` 中注册的所有模型
 - **环境变量读写** — 通过 `dotenv_values()` / `set_key()` 操作 `.env` 文件，Key 名格式为 `{PREFIX}_API_KEY`、`{PREFIX}_BASE_URL`、`{PREFIX}_MODEL`
 - **连通性验证** — 调用各厂商兼容的 `/models` 端点，根据 HTTP 状态码判断 Key 有效性（200/404 视为有效，401/403/429 视为无效）
+- **渠道启用管理** — PUT 渠道凭据时自动设置 `config.yaml` 的 `channels.<id>.enabled: true`，DELETE 时自动设为 `false`，无需手动编辑 config.yaml
+
+### 文件锁
+
+所有 `.env` 写操作使用 `filelock` 保护，防止并发写入导致数据覆盖。锁超时 5 秒。
 
 ### startup.py
 
@@ -57,3 +73,4 @@ FastAPI 路由模块，挂载于 `/api/env-settings` 前缀：
 - python-dotenv（.env 文件读写）
 - PyYAML（config.yaml 读写）
 - httpx（API Key 连通性验证）
+- filelock（.env 并发写入保护，声明于 `backend/pyproject.toml`）

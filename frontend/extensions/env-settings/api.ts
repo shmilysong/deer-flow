@@ -2,22 +2,24 @@ import { fetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
 import type {
-  EnvSettingsResponse,
-  EnvSettingsUpdateRequest,
+  ProviderSettingsResponse,
+  ProviderSettingsUpdateRequest,
   EnvSettingsUpdateResponse,
   VerifyResponse,
   DeleteResponse,
+  ChannelSettingsResponse,
+  ChannelUpdateRequest,
 } from "./types";
 
-export async function loadEnvSettings(): Promise<EnvSettingsResponse> {
-  const response = await fetch(`${getBackendBaseURL()}/api/env-settings`);
-  return response.json() as Promise<EnvSettingsResponse>;
+export async function loadProviderSettings(): Promise<ProviderSettingsResponse> {
+  const response = await fetch(`${getBackendBaseURL()}/api/env-settings/providers`);
+  return response.json() as Promise<ProviderSettingsResponse>;
 }
 
-export async function updateEnvSetting(
-  data: EnvSettingsUpdateRequest,
+export async function updateProviderSetting(
+  data: ProviderSettingsUpdateRequest,
 ): Promise<EnvSettingsUpdateResponse> {
-  const response = await fetch(`${getBackendBaseURL()}/api/env-settings`, {
+  const response = await fetch(`${getBackendBaseURL()}/api/env-settings/providers`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -29,11 +31,11 @@ export async function updateEnvSetting(
   return response.json() as Promise<EnvSettingsUpdateResponse>;
 }
 
-export async function deleteEnvSetting(
+export async function deleteProviderSetting(
   provider: string,
 ): Promise<DeleteResponse> {
   const response = await fetch(
-    `${getBackendBaseURL()}/api/env-settings/${encodeURIComponent(provider)}`,
+    `${getBackendBaseURL()}/api/env-settings/providers/${encodeURIComponent(provider)}`,
     { method: "DELETE" },
   );
   if (!response.ok) {
@@ -49,7 +51,7 @@ export async function verifyProviderKey(
   baseUrl?: string,
 ): Promise<VerifyResponse> {
   const response = await fetch(
-    `${getBackendBaseURL()}/api/env-settings/${encodeURIComponent(provider)}/verify`,
+    `${getBackendBaseURL()}/api/env-settings/providers/${encodeURIComponent(provider)}/verify`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -57,4 +59,54 @@ export async function verifyProviderKey(
     },
   );
   return response.json() as Promise<VerifyResponse>;
+}
+
+export async function loadChannelSettings(): Promise<ChannelSettingsResponse> {
+  const response = await fetch(`${getBackendBaseURL()}/api/env-settings/channels`);
+  return response.json() as Promise<ChannelSettingsResponse>;
+}
+
+export async function updateChannel(
+  data: ChannelUpdateRequest,
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${getBackendBaseURL()}/api/env-settings/channels`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail ?? "保存失败");
+  }
+  return response.json();
+}
+
+export async function deleteChannel(
+  channel: string,
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/env-settings/channels/${encodeURIComponent(channel)}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail ?? "清除失败");
+  }
+  return response.json();
+}
+
+export async function verifyChannel(
+  channel: string,
+  botId?: string,
+  botSecret?: string,
+): Promise<{ valid: boolean; message: string }> {
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/env-settings/channels/${encodeURIComponent(channel)}/verify`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bot_id: botId, bot_secret: botSecret }),
+    },
+  );
+  return response.json();
 }

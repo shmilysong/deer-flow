@@ -6,11 +6,31 @@ from pathlib import Path
 import yaml
 from dotenv import dotenv_values, find_dotenv, set_key
 from fastapi import APIRouter, HTTPException
+from filelock import FileLock
 from httpx import AsyncClient
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+_ENV_LOCK_PATH: str | None = None
 router = APIRouter(prefix="/api/env-settings", tags=["env-settings"])
+
+
+class ChannelInfo(BaseModel):
+    id: str
+    name: str
+    enabled: bool = Field(default=False)
+    running: bool = Field(default=False)
+    bot_id_exists: bool = Field(default=False)
+    bot_id_masked: str = Field(default="")
+    bot_secret_exists: bool = Field(default=False)
+    error: str = Field(default="")
+
+
+class ChannelUpdateRequest(BaseModel):
+    channel: str = Field(min_length=1)
+    bot_id: str = Field(min_length=1)
+    bot_secret: str = Field(min_length=1)
 
 
 class ProviderInfo(BaseModel):
@@ -24,11 +44,11 @@ class ProviderInfo(BaseModel):
     model: str = Field(default="", description="Current model")
 
 
-class EnvSettingsResponse(BaseModel):
+class ProviderSettingsResponse(BaseModel):
     providers: dict[str, ProviderInfo] = Field(description="Map of provider ID to provider info")
 
 
-class EnvSettingsUpdateRequest(BaseModel):
+class ProviderSettingsUpdateRequest(BaseModel):
     provider: str = Field(description="Provider identifier")
     api_key: str = Field(description="Plain-text API key", min_length=1)
     base_url: str | None = Field(default=None, description="Custom base URL")
@@ -53,6 +73,15 @@ class VerifyResponse(BaseModel):
 class DeleteResponse(BaseModel):
     success: bool = Field(default=True)
     message: str = Field(default="Config cleared")
+
+
+class ChannelVerifyRequest(BaseModel):
+    bot_id: str | None = Field(default=None)
+    bot_secret: str | None = Field(default=None)
+
+
+class ChannelSettingsResponse(BaseModel):
+    channels: dict[str, ChannelInfo]
 
 
 PROVIDERS = {
@@ -110,6 +139,14 @@ PROVIDER_CONFIG_TEMPLATE = {
     "minimax":       {"use": "langchain_openai:ChatOpenAI",                                  "extra": {}},
     "zhipuai":       {"use": "langchain_openai:ChatOpenAI",                                  "extra": {}},
     "siliconflow":   {"use": "langchain_openai:ChatOpenAI",                                  "extra": {}},
+}
+
+
+_CHANNEL_META: dict[str, dict[str, str]] = {
+    "wecom": {
+        "name": "企业微信",
+        "env_prefix": "WECOM",
+    },
 }
 
 
@@ -235,6 +272,11 @@ def _get_env_path() -> Path:
     return Path(env_path)
 
 
+def _get_env_lock() -> FileLock:
+    lock_path = _ENV_LOCK_PATH or str(_get_env_path().with_suffix(".env.lock"))
+    return FileLock(lock_path, timeout=5)
+
+
 def _mask_value(value: str) -> str:
     if not value:
         return ""
@@ -289,26 +331,118 @@ def _build_provider_info(provider_id: str, meta: dict) -> ProviderInfo:
     )
 
 
+def _build_channel_info(channel_id: str, meta: dict) -> ChannelInfo:
+    prefix = meta["env_prefix"]
+    bot_id = _read_env_value(f"{prefix}_BOT_ID")
+    bot_secret = _read_env_value(f"{prefix}_BOT_SECRET")
+
+    enabled = False
+    running = False
+    try:
+        from app.channels.service import get_channel_service
+        service = get_channel_service()
+        if service:
+            status = service.get_status()
+            ch_status = status["channels"].get(channel_id, {})
+            enabled = ch_status.get("enabled", False)
+            running = ch_status.get("running", False)
+    except Exception:
+        pass
+
+    return ChannelInfo(
+        id=channel_id,
+        name=meta["name"],
+        enabled=enabled,
+        running=running,
+        bot_id_exists=bool(bot_id),
+        bot_id_masked=_mask_value(bot_id) if bot_id else "",
+        bot_secret_exists=bool(bot_secret),
+    )
+
+
+async def _test_wecom_connect(bot_id: str, bot_secret: str) -> tuple[bool, str]:
+    try:
+        from aibot import WSClient, WSClientOptions
+        client = WSClient(WSClientOptions(bot_id=bot_id, secret=bot_secret))
+        await client.connect()
+        client.disconnect()
+        return (True, "连接成功")
+    except ImportError:
+        return (False, "wecom-aibot-python-sdk 未安装")
+    except Exception as e:
+        return (False, f"连接失败: {str(e)}")
+
+
+def _sanitize_channel_input(bot_id: str, bot_secret: str) -> tuple[str, str]:
+    from fastapi import HTTPException
+    bot_id = bot_id.strip()
+    bot_secret = bot_secret.strip()
+    if not bot_id:
+        raise HTTPException(status_code=422, detail="Bot ID cannot be empty")
+    if not bot_secret:
+        raise HTTPException(status_code=422, detail="Bot Secret cannot be empty")
+    return (bot_id, bot_secret)
+
+
+def _set_channel_enabled_in_config(channel_id: str, enabled: bool) -> bool:
+    """在 config.yaml 中设置 channels.<channel_id>.enabled = true/false。
+
+    如果 channels 区块或 channel 区块不存在则自动创建。
+    返回是否写入成功，失败时仅日志警告（不阻止主流程）。
+    """
+    config_path = _get_config_path()
+    if not config_path:
+        logger.warning("config.yaml not found, skip channel enabled toggle")
+        return False
+
+    try:
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.error("Failed to read config.yaml: %s", e, exc_info=True)
+        return False
+
+    channels = cfg.setdefault("channels", {})
+    channel_cfg = channels.setdefault(channel_id, {})
+
+    if channel_cfg.get("enabled") == enabled:
+        return True
+
+    channel_cfg["enabled"] = enabled
+    channels[channel_id] = channel_cfg
+    cfg["channels"] = channels
+
+    try:
+        with open(config_path, "w") as f:
+            yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        logger.info("[Audit] config.yaml channels.%s.enabled set to %s", channel_id, enabled)
+    except Exception as e:
+        logger.error("Failed to write config.yaml: %s", e, exc_info=True)
+        return False
+
+    return True
+
+
 @router.get(
-    "",
-    response_model=EnvSettingsResponse,
+    "/providers",
+    response_model=ProviderSettingsResponse,
     summary="读取所有厂商环境变量设置",
     description="返回所有 AI 厂商的 API Keys 状态（值已掩码处理）",
 )
-async def get_env_settings() -> EnvSettingsResponse:
+async def get_provider_settings() -> ProviderSettingsResponse:
     providers = {}
     for provider_id, meta in PROVIDERS.items():
         providers[provider_id] = _build_provider_info(provider_id, meta)
-    return EnvSettingsResponse(providers=providers)
+    return ProviderSettingsResponse(providers=providers)
 
 
 @router.put(
-    "",
+    "/providers",
     response_model=EnvSettingsUpdateResponse,
     summary="更新厂商环境变量",
     description="将指定厂商的 API Key / Base URL / Model 写入 .env，并在 config.yaml 中注册模型",
 )
-async def update_env_settings(request: EnvSettingsUpdateRequest) -> EnvSettingsUpdateResponse:
+async def update_provider_settings(request: ProviderSettingsUpdateRequest) -> EnvSettingsUpdateResponse:
     _validate_provider(request.provider)
     meta = PROVIDERS[request.provider]
     prefix = meta["env_prefix"]
@@ -316,12 +450,13 @@ async def update_env_settings(request: EnvSettingsUpdateRequest) -> EnvSettingsU
     if not key:
         raise HTTPException(status_code=422, detail="API Key cannot be empty")
     try:
-        _write_env_value(f"{prefix}_API_KEY", key)
-        base_url = request.base_url or meta["default_base_url"]
-        if request.base_url is not None:
-            _write_env_value(f"{prefix}_BASE_URL", request.base_url)
-        model = request.model.strip()
-        _write_env_value(f"{prefix}_MODEL", model)
+        with _get_env_lock():
+            _write_env_value(f"{prefix}_API_KEY", key)
+            base_url = request.base_url or meta["default_base_url"]
+            if request.base_url is not None:
+                _write_env_value(f"{prefix}_BASE_URL", request.base_url)
+            model = request.model.strip()
+            _write_env_value(f"{prefix}_MODEL", model)
         registered = _register_model_to_config(request.provider, model, base_url)
         msg = f"{meta['name']} 配置已保存"
         if registered:
@@ -335,19 +470,20 @@ async def update_env_settings(request: EnvSettingsUpdateRequest) -> EnvSettingsU
 
 
 @router.delete(
-    "/{provider}",
+    "/providers/{provider}",
     response_model=DeleteResponse,
     summary="清除厂商配置",
     description="从 .env 文件中删除指定厂商的 API_KEY、BASE_URL、MODEL 三个变量，并移除 config.yaml 中对应的模型条目",
 )
-async def delete_env_settings(provider: str) -> DeleteResponse:
+async def delete_provider_settings(provider: str) -> DeleteResponse:
     _validate_provider(provider)
     prefix = PROVIDERS[provider]["env_prefix"]
     removed = _remove_models_from_config(provider)
     try:
-        _unset_env_value(f"{prefix}_API_KEY")
-        _unset_env_value(f"{prefix}_BASE_URL")
-        _unset_env_value(f"{prefix}_MODEL")
+        with _get_env_lock():
+            _unset_env_value(f"{prefix}_API_KEY")
+            _unset_env_value(f"{prefix}_BASE_URL")
+            _unset_env_value(f"{prefix}_MODEL")
     except FileNotFoundError:
         pass
     except Exception as e:
@@ -359,7 +495,7 @@ async def delete_env_settings(provider: str) -> DeleteResponse:
 
 
 @router.post(
-    "/{provider}/verify",
+    "/providers/{provider}/verify",
     response_model=VerifyResponse,
     summary="验证厂商 API Key",
     description="通过向该厂商 API 发送测试请求验证 Key 连通性",
@@ -394,3 +530,159 @@ async def verify_provider_key(provider: str, request: VerifyRequest = None) -> V
     except Exception as e:
         logger.error("Verify %s failed: %s", provider, e, exc_info=True)
         return VerifyResponse(valid=False, message=f"网络错误: {str(e)}")
+
+
+@router.get(
+    "/channels",
+    response_model=ChannelSettingsResponse,
+    summary="读取所有渠道配置",
+    description="返回所有 IM 渠道的凭据状态和运行状态（Key 已掩码处理）",
+)
+async def get_channels() -> ChannelSettingsResponse:
+    channels = {}
+    for channel_id, meta in _CHANNEL_META.items():
+        channels[channel_id] = _build_channel_info(channel_id, meta)
+    return ChannelSettingsResponse(channels=channels)
+
+
+@router.put(
+    "/channels",
+    response_model=EnvSettingsUpdateResponse,
+    summary="更新渠道凭据",
+    description="保存渠道 Bot ID/Secret 到 .env，含值不变跳过 + 输入裁剪 + Test-Before-Switch 安全重启 + 审计日志",
+)
+async def update_channel_settings(request: ChannelUpdateRequest) -> EnvSettingsUpdateResponse:
+    channel_id = request.channel
+    if channel_id not in _CHANNEL_META:
+        raise HTTPException(status_code=404, detail=f"Channel '{channel_id}' not found")
+
+    meta = _CHANNEL_META[channel_id]
+    prefix = meta["env_prefix"]
+
+    # 输入裁剪
+    try:
+        bot_id, bot_secret = _sanitize_channel_input(request.bot_id, request.bot_secret)
+    except HTTPException:
+        raise
+
+    # 值不变跳过
+    existing_id = _read_env_value(f"{prefix}_BOT_ID")
+    existing_secret = _read_env_value(f"{prefix}_BOT_SECRET")
+    if existing_id == bot_id and existing_secret == bot_secret:
+        return EnvSettingsUpdateResponse(success=True, message="配置未变化，无需更新")
+
+    try:
+        with _get_env_lock():
+            _write_env_value(f"{prefix}_BOT_ID", bot_id)
+            _write_env_value(f"{prefix}_BOT_SECRET", bot_secret)
+
+        # 审计日志
+        logger.info("[Audit] channel.%s.save | bot_id=%s", channel_id, _mask_value(bot_id) if bot_id else "")
+
+        # Test-Before-Switch 安全重启
+        msg = f"{meta['name']} 配置已保存"
+        try:
+            from app.channels.service import get_channel_service
+            service = get_channel_service()
+            if service and "wecom" in service._config:
+                channel_running = "wecom" in service._channels and service._channels["wecom"].is_running
+
+                if channel_running:
+                    ok, err = await _test_wecom_connect(bot_id, bot_secret)
+                    if ok:
+                        service._config["wecom"]["bot_id"] = bot_id
+                        service._config["wecom"]["bot_secret"] = bot_secret
+                        await service.restart_channel("wecom")
+                        msg += "，渠道已自动重启"
+                    else:
+                        msg += f"（新参数校验失败：{err}，旧渠道正常运行不受影响）"
+                else:
+                    service._config["wecom"]["bot_id"] = bot_id
+                    service._config["wecom"]["bot_secret"] = bot_secret
+                    ok = await service.restart_channel("wecom")
+                    msg += "，渠道已自动重启" if ok else "（新参数仍无法启动渠道）"
+            else:
+                msg += "（ChannelService 未运行，重启 DeerFlow 后生效）"
+        except Exception as e:
+            msg += "（渠道热重启失败，请手动重启）"
+            logger.warning("[Audit] channel.%s.restart_failed | %s", channel_id, e)
+
+        # 自动设置 config.yaml 中 channels.<channel_id>.enabled = true
+        if _set_channel_enabled_in_config(channel_id, True):
+            msg += "，已修改 config.yaml"
+        else:
+            msg += "（config.yaml 写入失败，如需开机自启请手动设置）"
+
+        return EnvSettingsUpdateResponse(success=True, message=msg)
+    except Exception as e:
+        logger.error("Failed to save channel %s: %s", channel_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
+
+
+@router.delete(
+    "/channels/{channel}",
+    response_model=DeleteResponse,
+    summary="清除渠道配置",
+    description="清除渠道凭据，同步停止运行中的渠道，清理内存配置",
+)
+async def delete_channel_settings(channel: str) -> DeleteResponse:
+    if channel not in _CHANNEL_META:
+        raise HTTPException(status_code=404, detail=f"Channel '{channel}' not found")
+
+    meta = _CHANNEL_META[channel]
+    prefix = meta["env_prefix"]
+
+    try:
+        with _get_env_lock():
+            _unset_env_value(f"{prefix}_BOT_ID")
+            _unset_env_value(f"{prefix}_BOT_SECRET")
+    except FileNotFoundError:
+        pass
+
+    msg = f"已清除 {meta['name']} 的配置"
+
+    try:
+        from app.channels.service import get_channel_service
+        service = get_channel_service()
+        if service:
+            if channel in service._channels:
+                await service._channels[channel].stop()
+                del service._channels[channel]
+                msg += "，渠道已停止运行"
+            if channel in service._config:
+                service._config[channel]["bot_id"] = ""
+                service._config[channel]["bot_secret"] = ""
+    except Exception:
+        pass
+
+    logger.info("[Audit] channel.%s.delete", channel)
+
+    _set_channel_enabled_in_config(channel, False)
+    msg += "，已禁用开机自启"
+
+    return DeleteResponse(success=True, message=msg)
+
+
+@router.post(
+    "/channels/{channel}/verify",
+    response_model=VerifyResponse,
+    summary="验证渠道连通性",
+    description="通过 WebSocket 连接测试验证渠道凭据",
+)
+async def verify_channel_settings(channel: str, request: ChannelVerifyRequest = None) -> VerifyResponse:
+    if channel not in _CHANNEL_META:
+        raise HTTPException(status_code=404, detail=f"Channel '{channel}' not found")
+
+    meta = _CHANNEL_META[channel]
+    prefix = meta["env_prefix"]
+
+    bot_id = request.bot_id.strip() if request and request.bot_id else _read_env_value(f"{prefix}_BOT_ID")
+    bot_secret = request.bot_secret.strip() if request and request.bot_secret else _read_env_value(f"{prefix}_BOT_SECRET")
+
+    if not bot_id or not bot_secret:
+        return VerifyResponse(valid=False, message="Bot ID 和 Secret 未完整配置")
+
+    valid, message = await _test_wecom_connect(bot_id, bot_secret)
+    result = "valid" if valid else "invalid"
+    logger.info("[Audit] channel.%s.verify | result=%s", channel, result)
+    return VerifyResponse(valid=valid, message=message)

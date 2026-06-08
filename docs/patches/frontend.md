@@ -495,3 +495,31 @@ const createSuggestions = allSuggestions.filter(s => s.group === "create");
 2. 删除 SuggestionList 中的新代码
 3. 取消 JSX 注释块，恢复旧代码
 4. 取消注释已注释的 import：`SparklesIcon`、`ConfettiButton`、`DropdownMenuSeparator`
+
+---
+
+## WS: env-settings 渠道配置
+
+**文件**: `frontend/extensions/env-settings/`
+**风险**: ✅ 极低（扩展目录，零侵入）
+
+### WS1 — api.ts 路径拆分 + 新增渠道 API
+
+1. 现有 4 个函数的 URL 路径从 `/api/env-settings` 改为 `/api/env-settings/providers`
+2. 新增 4 个渠道 API 函数：`loadChannelSettings`、`updateChannel`、`deleteChannel`、`verifyChannel`
+
+### WS2 — types.ts 新增渠道类型
+
+新增 `ChannelInfo`、`ChannelSettingsResponse`、`ChannelUpdateRequest` 三个接口。
+
+### WS3 — hooks.ts 新增渠道 hooks
+
+新增 `useChannelSettings`、`useUpdateChannel`、`useDeleteChannel`、`useVerifyChannel` 四个 hooks（原有 hooks 名称不变）。
+
+### WS4 — channel-settings-page.tsx（新文件）
+
+独立的"渠道配置"标签页，包含 WeCom Bot ID/Secret 配置表单、安全重启逻辑、审计日志。
+
+### WS5 — extension.ts 双注册
+
+注册两个扩展：`id:"api"`（API Keys）+ `id:"channels"`（渠道配置）。

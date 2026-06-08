@@ -1,37 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
-  loadEnvSettings,
-  updateEnvSetting,
-  deleteEnvSetting,
+  loadProviderSettings,
+  updateProviderSetting,
+  deleteProviderSetting,
   verifyProviderKey,
+  loadChannelSettings,
+  updateChannel,
+  deleteChannel,
+  verifyChannel,
 } from "./api";
-import type { EnvSettingsUpdateRequest } from "./types";
+import type { ProviderSettingsUpdateRequest, ChannelUpdateRequest } from "./types";
 
-export function useEnvSettings() {
+export function useProviderSettings() {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["envSettings"],
-    queryFn: () => loadEnvSettings(),
+    queryKey: ["providerSettings"],
+    queryFn: () => loadProviderSettings(),
   });
   return { settings: data, isLoading, error };
 }
 
-export function useUpdateEnvSetting() {
+export function useUpdateProviderSetting() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: EnvSettingsUpdateRequest) => updateEnvSetting(data),
+    mutationFn: (data: ProviderSettingsUpdateRequest) => updateProviderSetting(data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["envSettings"] });
+      void queryClient.invalidateQueries({ queryKey: ["providerSettings"] });
     },
   });
 }
 
-export function useDeleteEnvSetting() {
+export function useDeleteProviderSetting() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (provider: string) => deleteEnvSetting(provider),
+    mutationFn: (provider: string) => deleteProviderSetting(provider),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["envSettings"] });
+      void queryClient.invalidateQueries({ queryKey: ["providerSettings"] });
     },
   });
 }
@@ -40,5 +44,40 @@ export function useVerifyProviderKey() {
   return useMutation({
     mutationFn: ({ provider, apiKey, baseUrl }: { provider: string; apiKey?: string; baseUrl?: string }) =>
       verifyProviderKey(provider, apiKey, baseUrl),
+  });
+}
+
+export function useChannelSettings() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["channelSettings"],
+    queryFn: () => loadChannelSettings(),
+  });
+  return { settings: data, isLoading, error };
+}
+
+export function useUpdateChannel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ChannelUpdateRequest) => updateChannel(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["channelSettings"] });
+    },
+  });
+}
+
+export function useDeleteChannel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (channel: string) => deleteChannel(channel),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["channelSettings"] });
+    },
+  });
+}
+
+export function useVerifyChannel() {
+  return useMutation({
+    mutationFn: ({ channel, botId, botSecret }: { channel: string; botId?: string; botSecret?: string }) =>
+      verifyChannel(channel, botId, botSecret),
   });
 }

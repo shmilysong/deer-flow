@@ -180,6 +180,15 @@ ls deerflow_extensions/data_collection/sitecustomize.py 2>&1 | grep "No such fil
 
 echo "=== T7d: 启动日志 Boot Loader 注入验证 ==="
 grep "\[Boot\] Complete" logs/gateway.log 2>/dev/null || echo "日志未找到（服务尚未启动）"
+
+echo "=== WS13: env_settings /providers 路径拆分 ==="
+grep -n "/providers" deerflow_extensions/env_settings/router.py
+
+echo "=== WS14: env_settings /channels 路由组 ==="
+grep -n "/channels" deerflow_extensions/env_settings/router.py
+
+echo "=== WS15: filelock 保护 ==="
+grep -n "filelock\|_get_env_lock" deerflow_extensions/env_settings/router.py
 ```
 
 如果某个 grep 返回空，说明补丁被覆盖了，需要重新打上。

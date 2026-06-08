@@ -9,7 +9,7 @@
 | 模块 | 说明 | 核心文件 |
 |------|------|----------|
 | [ads_auth](./ads_auth/README.md) | ADS 统一认证登录，替换 DeerFlow 原生登录页 | LoginPage.tsx, middleware-handler.ts |
-| [env-settings](./env-settings/README.md) | AI 模型 API Key 配置面板，支持 7 家厂商 | env-settings-page.tsx, providers.ts, hooks.ts |
+| [env-settings](./env-settings/README.md) | AI 模型 API Key 配置面板 + IM 渠道凭据管理（WeCom Bot） | provider-settings-page.tsx, providers.ts, hooks.ts |
 | [input-suggestions](./input-suggestions/README.md) | 输入建议按钮自定义系统，替换内置快捷按钮 | registry.ts, config.ts |
 | [mobile-sidebar](./mobile-sidebar/README.md) | 移动端侧栏浮动汉堡触发按钮 | mobile-sidebar-trigger.tsx |
 
@@ -29,12 +29,19 @@
 
 ### env-settings — 环境变量设置
 
-提供 AI 模型 API Key 的图形化管理界面，通过 SettingsDialog 扩展注册为"API Keys"配置页。
+提供 AI 模型 API Key 和 IM 渠道凭据的图形化管理界面，通过 SettingsDialog 扩展注册为两个标签页。
 
+**API Keys 配置**：
 - 支持 7 家厂商：DeepSeek、Kimi、Doubao、Qwen、MiniMax、GLM、硅基流动
 - 功能：Key 保存、Key 清除、连通性验证、模型选择（预置/自定义）、自定义请求地址
-- 数据通过 REST API 与后端交互，状态由 TanStack Query 管理
-- 后端路由和数据库操作在 `deerflow_extensions/env_settings/` 中实现，前端零侵入
+- 路径：`/api/env-settings/providers/*`
+
+**渠道配置**：
+- 支持企业微信（WeCom）Bot ID/Secret 配置
+- 功能：凭据保存、清除、连通性验证、热重启、运行状态感知、审计日志
+- 路径：`/api/env-settings/channels/*`
+
+数据通过 REST API 与后端交互，状态由 TanStack Query 管理。后端路由和数据库操作在 `deerflow_extensions/env_settings/` 中实现，前端零侵入。
 
 详见 [env-settings/README.md](./env-settings/README.md)。
 

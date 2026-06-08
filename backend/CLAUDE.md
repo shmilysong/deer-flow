@@ -271,7 +271,7 @@ CORS is same-origin by default when requests enter through nginx on port 2026. S
 | **Uploads** (`/api/threads/{id}/uploads`) | `POST /` - upload files (auto-converts PDF/PPT/Excel/Word); `GET /list` - list; `DELETE /{filename}` - delete |
 | **Threads** (`/api/threads/{id}`) | `DELETE /` - remove DeerFlow-managed local thread data after LangGraph thread deletion; unexpected failures are logged server-side and return a generic 500 detail |
 | **Artifacts** (`/api/threads/{id}/artifacts`) | `GET /{path}` - serve artifacts; active content types (`text/html`, `application/xhtml+xml`, `image/svg+xml`) are always forced as download attachments to reduce XSS risk; `?download=true` still forces download for other file types |
-| **Env Settings** (`/api/env-settings`) | `GET /` - list all 7 supported providers' env vars (masked); `PUT /` - update a provider's config (api_key, base_url, **model required**); `DELETE /{provider}` - clear a provider's config (removes models from config.yaml); `POST /{provider}/verify` - verify API key via provider's `/v1/models` endpoint (supports 429 rate-limit detection). Supported providers: siliconflow, deepseek, moonshot, volcengine, dashscope, minimax, zhipuai |
+| **Env Settings** (`/api/env-settings`) | `GET /providers` - list all 7 supported providers' env vars (masked); `PUT /providers` - update a provider's config (api_key, base_url, **model required**); `DELETE /providers/{provider}` - clear a provider's config (removes models from config.yaml); `POST /providers/{provider}/verify` - verify API key via provider's `/v1/models` endpoint (supports 429 rate-limit detection). `GET /channels` - read channel config status; `PUT /channels` - save channel credentials (Test-Before-Switch safe restart); `DELETE /channels/{channel}` - clear channel config; `POST /channels/{channel}/verify` - verify channel connectivity. Supported providers: siliconflow, deepseek, moonshot, volcengine, dashscope, minimax, zhipuai |
 | **Suggestions** (`/api/threads/{id}/suggestions`) | `POST /` - generate follow-up questions; rich list/block model content is normalized before JSON parsing |
 | **Thread Runs** (`/api/threads/{id}/runs`) | `POST /` - create background run; `POST /stream` - create + SSE stream; `POST /wait` - create + block; `GET /` - list runs; `GET /{rid}` - run details; `POST /{rid}/cancel` - cancel; `GET /{rid}/join` - join SSE; `GET /{rid}/messages` - paginated messages `{data, has_more}`; `GET /{rid}/events` - full event stream; `GET /../messages` - thread messages with feedback; `GET /../token-usage` - aggregate tokens |
 | **Feedback** (`/api/threads/{id}/runs/{rid}/feedback`) | `PUT /` - upsert feedback; `DELETE /` - delete user feedback; `POST /` - create feedback; `GET /` - list feedback; `GET /stats` - aggregate stats; `DELETE /{fid}` - delete specific |
@@ -680,7 +680,7 @@ See `docs/` directory for detailed documentation:
 |------|------|---------|
 | `ads_auth/` | ADS 统一认证 | Level 2 + 3 |
 | `data_collection/` | 蒸馏数据采集 | Level 3 |
-| `env_settings/` | 多厂商 API Key 管理 | Level 2 |
+| `env_settings/` | 多厂商 API Key 管理 + 渠道配置（/providers + /channels 分路径） | Level 2 |
 | `topic_guardrail/` | 回答范围限制 + 角色定义外部化<br>v7 纵深防御：Fail-Closed + TextPreprocessor + 拼音变体 + 语义审核<br>65 个暴力测试覆盖各类绕过手法<br>注入入口：`boot.py` Boot Loader | Level 2 + 3 |
 
 **改造完成后必须归档文档：**

@@ -24,18 +24,18 @@ import {
 import { SettingsSection } from "@/components/workspace/settings/settings-section";
 
 import {
-  useEnvSettings,
-  useUpdateEnvSetting,
-  useDeleteEnvSetting,
+  useProviderSettings,
+  useUpdateProviderSetting,
+  useDeleteProviderSetting,
   useVerifyProviderKey,
 } from "./hooks";
 import { PROVIDERS, getProviderMeta } from "./providers";
 import type { ProviderInfo } from "./types";
 
-export function EnvSettingsPage() {
-  const { settings, isLoading, error } = useEnvSettings();
-  const updateMutation = useUpdateEnvSetting();
-  const deleteMutation = useDeleteEnvSetting();
+export function ProviderSettingsPage() {
+  const { settings, isLoading, error } = useProviderSettings();
+  const updateMutation = useUpdateProviderSetting();
+  const deleteMutation = useDeleteProviderSetting();
   const verifyMutation = useVerifyProviderKey();
 
   const [selectedProviderId, setSelectedProviderId] = useState(PROVIDERS[0]?.id ?? "");
