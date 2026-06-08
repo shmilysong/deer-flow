@@ -97,15 +97,14 @@ export async function deleteChannel(
 
 export async function verifyChannel(
   channel: string,
-  botId?: string,
-  botSecret?: string,
+  credentials?: Record<string, string>,
 ): Promise<{ valid: boolean; message: string }> {
   const response = await fetch(
     `${getBackendBaseURL()}/api/env-settings/channels/${encodeURIComponent(channel)}/verify`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bot_id: botId, bot_secret: botSecret }),
+      body: JSON.stringify({ credentials }),
     },
   );
   return response.json();

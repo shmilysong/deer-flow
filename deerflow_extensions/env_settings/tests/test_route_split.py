@@ -295,8 +295,10 @@ class TestRouteSplit:
                 _url("/channels"),
                 json={
                     "channel": "wecom",
-                    "bot_id": "new_bot_id",
-                    "bot_secret": "new_secret_value",
+                    "credentials": {
+                        "bot_id": "new_bot_id",
+                        "bot_secret": "new_secret_value",
+                    },
                 },
             )
 
@@ -311,8 +313,7 @@ class TestRouteSplit:
             _url("/channels"),
             json={
                 "channel": "nonexistent_channel",
-                "bot_id": "test_id",
-                "bot_secret": "test_secret",
+                "credentials": {"bot_id": "test_id", "bot_secret": "test_secret"},
             },
         )
         assert response.status_code == 404
@@ -336,10 +337,11 @@ class TestRouteSplit:
         )
 
         with patch(
-            "deerflow_extensions.env_settings.router._test_wecom_connect",
-            new_callable=AsyncMock,
-        ) as mock_test_connect:
-            mock_test_connect.return_value = (True, "连接成功")
+            "deerflow_extensions.env_settings.router._get_test_fn",
+        ) as mock_get:
+            mock_fn = AsyncMock()
+            mock_fn.return_value = (True, "连接成功")
+            mock_get.return_value = mock_fn
 
             # 监视 verify_provider_key 是否被调用
             with patch(
@@ -351,11 +353,11 @@ class TestRouteSplit:
             ):
                 response = client.post(
                     _url("/channels/wecom/verify"),
-                    json={"bot_id": "test_bot", "bot_secret": "test_secret"},
+                    json={"credentials": {"bot_id": "test_bot", "bot_secret": "test_secret"}},
                 )
 
         # channels verify 逻辑应被触发
-        mock_test_connect.assert_awaited_once()
+        mock_fn.assert_awaited_once()
 
         # providers verify 不应被触发
         assert not provider_verify_triggered["called"], (
@@ -370,7 +372,7 @@ class TestRouteSplit:
         """POST /channels/{channel}/verify 不存在的渠道返回 404。"""
         response = client.post(
             _url("/channels/nonexistent/verify"),
-            json={"bot_id": "test", "bot_secret": "test"},
+            json={"credentials": {"bot_id": "test", "bot_secret": "test"}},
         )
         assert response.status_code == 404
 
@@ -383,14 +385,15 @@ class TestRouteSplit:
     def test_rt7_post_channels_verify_response_shape(self, client, channel, expected_status):
         """POST /channels 的 verify 响应包含 valid 和 message 字段。"""
         with patch(
-            "deerflow_extensions.env_settings.router._test_wecom_connect",
-            new_callable=AsyncMock,
-        ) as mock_test:
-            mock_test.return_value = (False, "凭据无效")
+            "deerflow_extensions.env_settings.router._get_test_fn",
+        ) as mock_get:
+            mock_fn = AsyncMock()
+            mock_fn.return_value = (False, "凭据无效")
+            mock_get.return_value = mock_fn
 
             response = client.post(
                 _url(f"/channels/{channel}/verify"),
-                json={"bot_id": "test", "bot_secret": "test"},
+                json={"credentials": {"bot_id": "test", "bot_secret": "test"}},
             )
 
         assert response.status_code == expected_status

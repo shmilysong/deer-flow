@@ -36,7 +36,7 @@ from router import (
     _read_env_value,
     _write_env_value,
     _unset_env_value,
-    _sanitize_channel_input,
+    _sanitize_channel_credentials,
 )
 
 # ---------------------------------------------------------------------------
@@ -244,33 +244,64 @@ class TestWriteReadConsistency:
 # ---------------------------------------------------------------------------
 
 
-class TestSanitizeChannelInput:
-    """_sanitize_channel_input —— 输入裁剪与空值校验"""
+class TestSanitizeChannelCredentials:
+    """_sanitize_channel_credentials —— 输入裁剪与空值校验"""
+
+    CRED_FIELDS = [
+        {"key": "bot_id", "label": "Bot ID"},
+        {"key": "bot_secret", "label": "Bot Secret"},
+    ]
+    SINGLE_FIELD = [
+        {"key": "bot_token", "label": "Bot Token"},
+    ]
 
     def test_strips_whitespace(self):
-        """UT13: "  abc  " → "abc"，"  def  " → "def" """
-        bot_id, bot_secret = _sanitize_channel_input("  abc  ", "  def  ")
-        assert bot_id == "abc"
-        assert bot_secret == "def"
+        """UT13: 所有字段 trim 空白"""
+        cleaned = _sanitize_channel_credentials(
+            {"bot_id": "  abc  ", "bot_secret": "  def  "},
+            self.CRED_FIELDS,
+        )
+        assert cleaned["bot_id"] == "abc"
+        assert cleaned["bot_secret"] == "def"
 
-    def test_trim_to_empty_raises(self):
-        """UT14: trim 后 bot_id 或 bot_secret 为空时抛出 HTTPException(422)"""
-        # bot_id 为空
+    def test_empty_raises(self):
+        """UT14: 空值抛 HTTPException(422) 附带字段 label"""
         with pytest.raises(HTTPException) as exc:
-            _sanitize_channel_input("  ", "secret")
+            _sanitize_channel_credentials({"bot_id": "  ", "bot_secret": "secret"}, self.CRED_FIELDS)
         assert exc.value.status_code == 422
-        assert "Bot ID cannot be empty" in exc.value.detail
+        assert "Bot ID" in exc.value.detail
 
-        # bot_secret 为空
         with pytest.raises(HTTPException) as exc:
-            _sanitize_channel_input("id", "  ")
+            _sanitize_channel_credentials({"bot_id": "id", "bot_secret": "  "}, self.CRED_FIELDS)
         assert exc.value.status_code == 422
-        assert "Bot Secret cannot be empty" in exc.value.detail
+        assert "Bot Secret" in exc.value.detail
 
-        # 两者都为空
+    def test_both_empty_raises(self):
+        """全部为空抛 422"""
+        with pytest.raises(HTTPException):
+            _sanitize_channel_credentials({"bot_id": "", "bot_secret": ""}, self.CRED_FIELDS)
+
+    def test_single_field(self):
+        """单字段渠道（如微信 Bot Token）"""
+        cleaned = _sanitize_channel_credentials({"bot_token": " my_token "}, self.SINGLE_FIELD)
+        assert cleaned["bot_token"] == "my_token"
+
+    def test_single_field_empty_raises(self):
+        """单字段空值抛 422"""
         with pytest.raises(HTTPException) as exc:
-            _sanitize_channel_input("", "")
+            _sanitize_channel_credentials({"bot_token": ""}, self.SINGLE_FIELD)
         assert exc.value.status_code == 422
+        assert "Bot Token" in exc.value.detail
+
+    def test_extra_fields_ignored(self):
+        """多提交的字段被忽略"""
+        cleaned = _sanitize_channel_credentials(
+            {"bot_id": "id", "bot_secret": "secret", "extra_field": "ignored"},
+            self.CRED_FIELDS,
+        )
+        assert "extra_field" not in cleaned
+        assert cleaned["bot_id"] == "id"
+        assert cleaned["bot_secret"] == "secret"
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +310,7 @@ class TestSanitizeChannelInput:
 @pytest.fixture(autouse=True)
 def cleanup_test_env_vars():
     """每个测试前后清理测试用环境变量，防止交叉污染。"""
-    test_prefixes = ["WECOM_", "LONG_KEY", "EXISTING_KEY", "I_DO_NOT_EXIST"]
+    test_prefixes = ["WECOM_", "FEISHU_", "DINGTALK_", "WECHAT_", "LONG_KEY", "EXISTING_KEY", "I_DO_NOT_EXIST"]
     for key in list(os.environ.keys()):
         if any(key.startswith(p) for p in test_prefixes):
             os.environ.pop(key, None)

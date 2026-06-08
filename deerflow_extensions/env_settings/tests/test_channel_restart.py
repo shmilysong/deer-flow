@@ -90,17 +90,18 @@ class TestChannelRestart:
 
     @pytest.fixture
     def mock_test_connect(self, request):
-        """Control _test_wecom_connect return values.
+        """Control _get_test_fn return values.
 
-        Default: (True, "连接成功").
+        Default: returns (True, "连接成功").
         Override via ``request.getfixturevalue`` for RS2.
         """
         with patch(
-            "deerflow_extensions.env_settings.router._test_wecom_connect",
-            new_callable=AsyncMock,
+            "deerflow_extensions.env_settings.router._get_test_fn",
         ) as mock:
-            mock.return_value = (True, "连接成功")
-            yield mock
+            mock_fn = AsyncMock()
+            mock_fn.return_value = (True, "连接成功")
+            mock.return_value = mock_fn
+            yield mock_fn
 
     @pytest.fixture
     def mock_get_service(self):
@@ -134,11 +135,12 @@ class TestChannelRestart:
 
     async def _do_update(
         self,
-        bot_id: str = "new_bot_id",
-        bot_secret: str = "new_secret",
+        credentials: dict[str, str] | None = None,
         channel: str = "wecom",
     ) -> object:
         """Call update_channel_settings and return the response."""
+        if credentials is None:
+            credentials = {"bot_id": "new_bot_id", "bot_secret": "new_secret"}
         from deerflow_extensions.env_settings.router import (
             ChannelUpdateRequest,
             update_channel_settings,
@@ -146,8 +148,7 @@ class TestChannelRestart:
 
         request = ChannelUpdateRequest(
             channel=channel,
-            bot_id=bot_id,
-            bot_secret=bot_secret,
+            credentials=credentials,
         )
         return await update_channel_settings(request)
 
@@ -176,8 +177,8 @@ class TestChannelRestart:
 
         resp = await self._do_update()
 
-        # _test_wecom_connect was called
-        mock_test_connect.assert_awaited_once_with("new_bot_id", "new_secret")
+        # _test_wecom_connect was called with credentials kwargs
+        mock_test_connect.assert_awaited_once_with(bot_id="new_bot_id", bot_secret="new_secret")
 
         # Config was updated in memory
         assert service._config["wecom"]["bot_id"] == "new_bot_id"
@@ -206,15 +207,16 @@ class TestChannelRestart:
 
         # Override test-connect to fail
         with patch(
-            "deerflow_extensions.env_settings.router._test_wecom_connect",
-            new_callable=AsyncMock,
-        ) as mock_test:
-            mock_test.return_value = (False, "连接失败: token invalid")
+            "deerflow_extensions.env_settings.router._get_test_fn",
+        ) as mock_get:
+            mock_fn = AsyncMock()
+            mock_fn.return_value = (False, "连接失败: token invalid")
+            mock_get.return_value = mock_fn
 
             resp = await self._do_update()
 
-            # _test_wecom_connect was called
-            mock_test.assert_awaited_once_with("new_bot_id", "new_secret")
+            # _test_wecom_connect was called with credentials kwargs
+            mock_fn.assert_awaited_once_with(bot_id="new_bot_id", bot_secret="new_secret")
 
             # restart_channel was NOT called
             service.restart_channel.assert_not_called()
@@ -341,15 +343,13 @@ class TestChannelRestart:
             mock_read.side_effect = _same_values
 
             resp = await self._do_update(
-                bot_id="same_bot_id",
-                bot_secret="same_secret",
+                credentials={"bot_id": "same_bot_id", "bot_secret": "same_secret"},
             )
 
         # _write_env_value was NOT called
         mock_write_env.assert_not_called()
 
         # get_channel_service was NOT called either (early return before that logic)
-        # (no need to check restart_channel since service was never retrieved)
 
         # Message says no change
         assert "配置未变化" in resp.message

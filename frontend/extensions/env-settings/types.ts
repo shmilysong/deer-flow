@@ -40,9 +40,7 @@ export interface ChannelInfo {
   name: string;
   enabled: boolean;
   running: boolean;
-  bot_id_exists: boolean;
-  bot_id_masked: string;
-  bot_secret_exists: boolean;
+  credentials: Record<string, string>;
   error: string;
 }
 
@@ -52,6 +50,9 @@ export interface ChannelSettingsResponse {
 
 export interface ChannelUpdateRequest {
   channel: string;
-  bot_id: string;
-  bot_secret: string;
+  credentials: Record<string, string>;
+}
+
+export interface ChannelVerifyRequest {
+  credentials: Record<string, string>;
 }

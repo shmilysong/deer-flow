@@ -77,7 +77,7 @@ export function useDeleteChannel() {
 
 export function useVerifyChannel() {
   return useMutation({
-    mutationFn: ({ channel, botId, botSecret }: { channel: string; botId?: string; botSecret?: string }) =>
-      verifyChannel(channel, botId, botSecret),
+    mutationFn: ({ channel, credentials }: { channel: string; credentials?: Record<string, string> }) =>
+      verifyChannel(channel, credentials),
   });
 }

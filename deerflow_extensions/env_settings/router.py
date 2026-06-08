@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -22,16 +23,13 @@ class ChannelInfo(BaseModel):
     name: str
     enabled: bool = Field(default=False)
     running: bool = Field(default=False)
-    bot_id_exists: bool = Field(default=False)
-    bot_id_masked: str = Field(default="")
-    bot_secret_exists: bool = Field(default=False)
+    credentials: dict[str, str] = Field(default={}, description="key → masked value")
     error: str = Field(default="")
 
 
 class ChannelUpdateRequest(BaseModel):
     channel: str = Field(min_length=1)
-    bot_id: str = Field(min_length=1)
-    bot_secret: str = Field(min_length=1)
+    credentials: dict[str, str] = Field(default={}, description="key → plain-text value")
 
 
 class ProviderInfo(BaseModel):
@@ -77,8 +75,7 @@ class DeleteResponse(BaseModel):
 
 
 class ChannelVerifyRequest(BaseModel):
-    bot_id: str | None = Field(default=None)
-    bot_secret: str | None = Field(default=None)
+    credentials: dict[str, str] = Field(default={}, description="key → plain-text value")
 
 
 class ChannelSettingsResponse(BaseModel):
@@ -143,10 +140,37 @@ PROVIDER_CONFIG_TEMPLATE = {
 }
 
 
-_CHANNEL_META: dict[str, dict[str, str]] = {
+_CHANNEL_META: dict[str, dict] = {
     "wecom": {
         "name": "企业微信",
         "env_prefix": "WECOM",
+        "credential_fields": [
+            {"key": "bot_id", "label": "Bot ID"},
+            {"key": "bot_secret", "label": "Bot Secret"},
+        ],
+    },
+    "feishu": {
+        "name": "飞书",
+        "env_prefix": "FEISHU",
+        "credential_fields": [
+            {"key": "app_id", "label": "App ID"},
+            {"key": "app_secret", "label": "App Secret"},
+        ],
+    },
+    "dingtalk": {
+        "name": "钉钉",
+        "env_prefix": "DINGTALK",
+        "credential_fields": [
+            {"key": "client_id", "label": "Client ID"},
+            {"key": "client_secret", "label": "Client Secret"},
+        ],
+    },
+    "wechat": {
+        "name": "微信",
+        "env_prefix": "WECHAT",
+        "credential_fields": [
+            {"key": "bot_token", "label": "Bot Token"},
+        ],
     },
 }
 
@@ -334,8 +358,12 @@ def _build_provider_info(provider_id: str, meta: dict) -> ProviderInfo:
 
 def _build_channel_info(channel_id: str, meta: dict) -> ChannelInfo:
     prefix = meta["env_prefix"]
-    bot_id = _read_env_value(f"{prefix}_BOT_ID")
-    bot_secret = _read_env_value(f"{prefix}_BOT_SECRET")
+    credentials = {}
+    for field in meta["credential_fields"]:
+        key = field["key"]
+        env_key = f"{prefix}_{key.upper()}"
+        value = _read_env_value(env_key)
+        credentials[key] = _mask_value(value) if value else ""
 
     enabled = False
     running = False
@@ -344,9 +372,9 @@ def _build_channel_info(channel_id: str, meta: dict) -> ChannelInfo:
         service = get_channel_service()
         if service:
             status = service.get_status()
-            ch_status = status["channels"].get(channel_id, {})
-            enabled = ch_status.get("enabled", False)
-            running = ch_status.get("running", False)
+            ch = status["channels"].get(channel_id, {})
+            enabled = ch.get("enabled", False)
+            running = ch.get("running", False)
     except Exception:
         pass
 
@@ -355,9 +383,7 @@ def _build_channel_info(channel_id: str, meta: dict) -> ChannelInfo:
         name=meta["name"],
         enabled=enabled,
         running=running,
-        bot_id_exists=bool(bot_id),
-        bot_id_masked=_mask_value(bot_id) if bot_id else "",
-        bot_secret_exists=bool(bot_secret),
+        credentials=credentials,
     )
 
 
@@ -395,21 +421,75 @@ async def _test_wecom_connect(bot_id: str, bot_secret: str) -> tuple[bool, str]:
         return (False, f"连接失败: {str(e)}")
 
 
-def _sanitize_channel_input(bot_id: str, bot_secret: str) -> tuple[str, str]:
-    from fastapi import HTTPException
-    bot_id = bot_id.strip()
-    bot_secret = bot_secret.strip()
-    if not bot_id:
-        raise HTTPException(status_code=422, detail="Bot ID cannot be empty")
-    if not bot_secret:
-        raise HTTPException(status_code=422, detail="Bot Secret cannot be empty")
-    return (bot_id, bot_secret)
+async def _test_feishu_connect(app_id: str, app_secret: str) -> tuple[bool, str]:
+    try:
+        import lark_oapi as lark
+
+        client = lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
+        resp = client.app.v2.app.get(lark.AppGetRequest())
+        if resp.success():
+            return (True, "连接成功")
+        else:
+            return (False, resp.msg or "认证失败")
+    except ImportError:
+        return (False, "lark-oapi 未安装")
+    except Exception as e:
+        return (False, f"连接失败: {str(e)}")
+
+
+async def _test_dingtalk_connect(client_id: str, client_secret: str) -> tuple[bool, str]:
+    try:
+        import dingtalk_stream  # noqa: F401
+    except ImportError:
+        return (False, "dingtalk-stream 未安装")
+
+    try:
+        async with AsyncClient(timeout=10) as http:
+            resp = await http.get(
+                "https://oapi.dingtalk.com/gettoken",
+                params={"appkey": client_id, "appsecret": client_secret},
+            )
+            data = resp.json()
+            if data.get("errcode") == 0 and data.get("access_token"):
+                return (True, "连接成功")
+            errmsg = data.get("errmsg", "未知错误")
+            return (False, f"认证失败: {errmsg}")
+    except Exception as e:
+        return (False, f"连接失败: {str(e)}")
+
+
+async def _test_wechat_connect(bot_token: str) -> tuple[bool, str]:
+    token = bot_token.strip()
+    if len(token) < 8:
+        return (False, "Bot Token 长度不足，请检查配置")
+    return (True, "格式验证通过（连接性需启动后确认）")
+
+
+def _sanitize_channel_credentials(
+    credentials: dict[str, str],
+    credential_fields: list[dict],
+) -> dict[str, str]:
+    cleaned = {}
+    for field in credential_fields:
+        key = field["key"]
+        raw = credentials.get(key, "")
+        if isinstance(raw, str):
+            raw = raw.strip()
+        if not raw:
+            raise HTTPException(
+                status_code=422,
+                detail=f"'{field['label']}' is required and cannot be empty",
+            )
+        cleaned[key] = raw
+    return cleaned
 
 
 def _set_channel_enabled_in_config(channel_id: str, enabled: bool) -> bool:
     """在 config.yaml 中设置 channels.<channel_id>.enabled = true/false。
 
-    如果 channels 区块或 channel 区块不存在则自动创建。
+    如果 channels 区块或 channel 区块不存在则自动创建，并补齐缺失的凭据
+    引用字段（如 bot_id: $WECOM_BOT_ID），确保 ChannelService 能从 .env
+    读取凭据。
     返回是否写入成功，失败时仅日志警告（不阻止主流程）。
     """
     config_path = _get_config_path()
@@ -428,21 +508,52 @@ def _set_channel_enabled_in_config(channel_id: str, enabled: bool) -> bool:
     channel_cfg = channels.setdefault(channel_id, {})
 
     if channel_cfg.get("enabled") == enabled:
+        changed = False
+    else:
+        channel_cfg["enabled"] = enabled
+        changed = True
+
+    # 补齐缺失的凭据引用字段，确保 ChannelService 能找到凭据
+    meta = _CHANNEL_META.get(channel_id)
+    if meta:
+        prefix = meta["env_prefix"]
+        for field in meta["credential_fields"]:
+            key = field["key"]
+            if key not in channel_cfg:
+                env_ref = f"${prefix}_{key.upper()}"
+                channel_cfg[key] = env_ref
+                changed = True
+
+    if not changed:
         return True
 
-    channel_cfg["enabled"] = enabled
     channels[channel_id] = channel_cfg
     cfg["channels"] = channels
 
     try:
         with open(config_path, "w") as f:
             yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-        logger.info("[Audit] config.yaml channels.%s.enabled set to %s", channel_id, enabled)
+        logger.info("[Audit] config.yaml channels.%s.enabled set to %s with credential fields", channel_id, enabled)
     except Exception as e:
         logger.error("Failed to write config.yaml: %s", e, exc_info=True)
         return False
 
     return True
+
+
+_channel_test_fns: dict[str, Callable] = {
+    "wecom": _test_wecom_connect,
+    "feishu": _test_feishu_connect,
+    "dingtalk": _test_dingtalk_connect,
+    "wechat": _test_wechat_connect,
+}
+
+
+def _get_test_fn(channel_id: str):
+    fn = _channel_test_fns.get(channel_id)
+    if fn is None:
+        raise HTTPException(status_code=400, detail=f"Verification not available for channel '{channel_id}'")
+    return fn
 
 
 @router.get(
@@ -571,7 +682,7 @@ async def get_channels() -> ChannelSettingsResponse:
     "/channels",
     response_model=EnvSettingsUpdateResponse,
     summary="更新渠道凭据",
-    description="保存渠道 Bot ID/Secret 到 .env，含值不变跳过 + 输入裁剪 + Test-Before-Switch 安全重启 + 审计日志",
+    description="保存渠道凭据到 .env，含值不变跳过 + 输入裁剪 + Test-Before-Switch 安全重启 + 审计日志",
 )
 async def update_channel_settings(request: ChannelUpdateRequest) -> EnvSettingsUpdateResponse:
     channel_id = request.channel
@@ -580,51 +691,59 @@ async def update_channel_settings(request: ChannelUpdateRequest) -> EnvSettingsU
 
     meta = _CHANNEL_META[channel_id]
     prefix = meta["env_prefix"]
+    fields = meta["credential_fields"]
 
     # 输入裁剪
-    try:
-        bot_id, bot_secret = _sanitize_channel_input(request.bot_id, request.bot_secret)
-    except HTTPException:
-        raise
+    cleaned = _sanitize_channel_credentials(request.credentials, fields)
 
     # 值不变跳过
-    existing_id = _read_env_value(f"{prefix}_BOT_ID")
-    existing_secret = _read_env_value(f"{prefix}_BOT_SECRET")
-    if existing_id == bot_id and existing_secret == bot_secret:
+    unchanged = True
+    for field in fields:
+        key = field["key"]
+        env_key = f"{prefix}_{key.upper()}"
+        existing = _read_env_value(env_key)
+        if existing != cleaned.get(key, ""):
+            unchanged = False
+            break
+    if unchanged:
         return EnvSettingsUpdateResponse(success=True, message="配置未变化，无需更新")
 
     try:
         with _get_env_lock():
-            _write_env_value(f"{prefix}_BOT_ID", bot_id)
-            _write_env_value(f"{prefix}_BOT_SECRET", bot_secret)
+            for field in fields:
+                key = field["key"]
+                env_key = f"{prefix}_{key.upper()}"
+                _write_env_value(env_key, cleaned[key])
 
         # 审计日志
-        logger.info("[Audit] channel.%s.save | bot_id=%s", channel_id, _mask_value(bot_id) if bot_id else "")
+        masked_keys = {k: _mask_value(cleaned[k]) for k in cleaned}
+        logger.info("[Audit] channel.%s.save | credentials=%s", channel_id, masked_keys)
 
         # Test-Before-Switch 安全重启
         msg = f"{meta['name']} 配置已保存"
         try:
             from app.channels.service import get_channel_service
             service = get_channel_service()
-            if service and "wecom" in service._config:
-                channel_running = "wecom" in service._channels and service._channels["wecom"].is_running
+            if service and channel_id in service._config:
+                channel_running = channel_id in service._channels and service._channels[channel_id].is_running
 
                 if channel_running:
-                    ok, err = await _test_wecom_connect(bot_id, bot_secret)
+                    test_fn = _get_test_fn(channel_id)
+                    ok, err = await test_fn(**cleaned)
                     if ok:
-                        service._config["wecom"]["bot_id"] = bot_id
-                        service._config["wecom"]["bot_secret"] = bot_secret
-                        await service.restart_channel("wecom")
+                        service._config[channel_id].update(cleaned)
+                        await service.restart_channel(channel_id)
                         msg += "，渠道已自动重启"
                     else:
                         msg += f"（新参数校验失败：{err}，旧渠道正常运行不受影响）"
                 else:
-                    service._config["wecom"]["bot_id"] = bot_id
-                    service._config["wecom"]["bot_secret"] = bot_secret
-                    ok = await service.restart_channel("wecom")
+                    service._config[channel_id].update(cleaned)
+                    ok = await service.restart_channel(channel_id)
                     msg += "，渠道已自动重启" if ok else "（新参数仍无法启动渠道）"
             else:
                 msg += "（ChannelService 未运行，重启 DeerFlow 后生效）"
+        except HTTPException:
+            raise
         except Exception as e:
             msg += "（渠道热重启失败，请手动重启）"
             logger.warning("[Audit] channel.%s.restart_failed | %s", channel_id, e)
@@ -636,6 +755,8 @@ async def update_channel_settings(request: ChannelUpdateRequest) -> EnvSettingsU
             msg += "（config.yaml 写入失败，如需开机自启请手动设置）"
 
         return EnvSettingsUpdateResponse(success=True, message=msg)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to save channel %s: %s", channel_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
@@ -653,11 +774,13 @@ async def delete_channel_settings(channel: str) -> DeleteResponse:
 
     meta = _CHANNEL_META[channel]
     prefix = meta["env_prefix"]
+    fields = meta["credential_fields"]
 
     try:
         with _get_env_lock():
-            _unset_env_value(f"{prefix}_BOT_ID")
-            _unset_env_value(f"{prefix}_BOT_SECRET")
+            for field in fields:
+                env_key = f"{prefix}_{field['key'].upper()}"
+                _unset_env_value(env_key)
     except FileNotFoundError:
         pass
 
@@ -672,8 +795,8 @@ async def delete_channel_settings(channel: str) -> DeleteResponse:
                 del service._channels[channel]
                 msg += "，渠道已停止运行"
             if channel in service._config:
-                service._config[channel]["bot_id"] = ""
-                service._config[channel]["bot_secret"] = ""
+                for field in fields:
+                    service._config[channel][field["key"]] = ""
     except Exception:
         pass
 
@@ -689,7 +812,7 @@ async def delete_channel_settings(channel: str) -> DeleteResponse:
     "/channels/{channel}/verify",
     response_model=VerifyResponse,
     summary="验证渠道连通性",
-    description="通过 WebSocket 连接测试验证渠道凭据",
+    description="通过 SDK 连接测试验证渠道凭据",
 )
 async def verify_channel_settings(channel: str, request: ChannelVerifyRequest = None) -> VerifyResponse:
     if channel not in _CHANNEL_META:
@@ -697,14 +820,26 @@ async def verify_channel_settings(channel: str, request: ChannelVerifyRequest = 
 
     meta = _CHANNEL_META[channel]
     prefix = meta["env_prefix"]
+    fields = meta["credential_fields"]
 
-    bot_id = request.bot_id.strip() if request and request.bot_id else _read_env_value(f"{prefix}_BOT_ID")
-    bot_secret = request.bot_secret.strip() if request and request.bot_secret else _read_env_value(f"{prefix}_BOT_SECRET")
+    credentials = {}
+    if request and request.credentials:
+        credentials = request.credentials
+    else:
+        for field in fields:
+            env_key = f"{prefix}_{field['key'].upper()}"
+            credentials[field["key"]] = _read_env_value(env_key)
 
-    if not bot_id or not bot_secret:
-        return VerifyResponse(valid=False, message="Bot ID 和 Secret 未完整配置")
+    has_all = all(credentials.get(f["key"]) for f in fields)
+    if not has_all:
+        return VerifyResponse(valid=False, message="凭据未完整配置")
 
-    valid, message = await _test_wecom_connect(bot_id, bot_secret)
+    try:
+        test_fn = _get_test_fn(channel)
+    except HTTPException:
+        return VerifyResponse(valid=False, message=f"渠道 '{channel}' 不支持连通性验证")
+
+    valid, message = await test_fn(**credentials)
     result = "valid" if valid else "invalid"
     logger.info("[Audit] channel.%s.verify | result=%s", channel, result)
     return VerifyResponse(valid=valid, message=message)

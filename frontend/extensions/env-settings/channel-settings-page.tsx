@@ -10,12 +10,20 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SettingsSection } from "@/components/workspace/settings/settings-section";
 
+import { CHANNELS } from "./channels";
 import {
   useChannelSettings,
   useDeleteChannel,
@@ -29,29 +37,48 @@ export function ChannelSettingsPage() {
   const deleteMutation = useDeleteChannel();
   const verifyMutation = useVerifyChannel();
 
-  const [botId, setBotId] = useState("");
-  const [botSecret, setBotSecret] = useState("");
-  const [showBotId, setShowBotId] = useState(false);
-  const [showBotSecret, setShowBotSecret] = useState(false);
+  const [selectedChannelId, setSelectedChannelId] = useState("wecom");
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [showFields, setShowFields] = useState<Record<string, boolean>>({});
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const wecomInfo = settings?.channels?.wecom;
+  const selectedMeta = useMemo(
+    () => CHANNELS.find((c) => c.id === selectedChannelId)!,
+    [selectedChannelId],
+  );
+  const channelInfo = settings?.channels?.[selectedChannelId];
 
-  const handleSaveWeCom = useCallback(async () => {
-    if (!botId.trim() && !botSecret.trim()) return;
+  const hasAnyValue = useMemo(
+    () => Object.values(formValues).some((v) => v.trim()),
+    [formValues],
+  );
+  const hasCredentials = useMemo(
+    () =>
+      channelInfo &&
+      Object.values(channelInfo.credentials).some((v) => v),
+    [channelInfo],
+  );
+
+  const handleChannelChange = useCallback((id: string) => {
+    setSelectedChannelId(id);
+    setFormValues({});
+    setShowFields({});
+    setStatusMessage(null);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!hasAnyValue) return;
     setStatusMessage(null);
     try {
       const result = await updateMutation.mutateAsync({
-        channel: "wecom",
-        bot_id: botId.trim(),
-        bot_secret: botSecret.trim(),
+        channel: selectedChannelId,
+        credentials: formValues,
       });
-      setBotId("");
-      setBotSecret("");
+      setFormValues({});
       setStatusMessage({ type: "success", text: result.message });
     } catch (err) {
       setStatusMessage({
@@ -59,15 +86,19 @@ export function ChannelSettingsPage() {
         text: err instanceof Error ? err.message : "保存失败",
       });
     }
-  }, [botId, botSecret, updateMutation]);
+  }, [formValues, hasAnyValue, selectedChannelId, updateMutation]);
 
-  const handleVerifyWeCom = useCallback(async () => {
+  const handleVerify = useCallback(async () => {
     setStatusMessage(null);
     try {
       const result = await verifyMutation.mutateAsync({
-        channel: "wecom",
-        botId: botId.trim() || undefined,
-        botSecret: botSecret.trim() || undefined,
+        channel: selectedChannelId,
+        credentials:
+          hasAnyValue
+            ? Object.fromEntries(
+                Object.entries(formValues).filter(([, v]) => v.trim()),
+              )
+            : undefined,
       });
       setStatusMessage({
         type: result.valid ? "success" : "error",
@@ -79,15 +110,14 @@ export function ChannelSettingsPage() {
         text: err instanceof Error ? err.message : "验证失败",
       });
     }
-  }, [botId, botSecret, verifyMutation]);
+  }, [formValues, hasAnyValue, selectedChannelId, verifyMutation]);
 
-  const handleDeleteWeCom = useCallback(async () => {
+  const handleDelete = useCallback(async () => {
     setDeleteConfirmOpen(false);
     setStatusMessage(null);
     try {
-      const result = await deleteMutation.mutateAsync("wecom");
-      setBotId("");
-      setBotSecret("");
+      const result = await deleteMutation.mutateAsync(selectedChannelId);
+      setFormValues({});
       setStatusMessage({ type: "success", text: result.message });
     } catch (err) {
       setStatusMessage({
@@ -95,11 +125,11 @@ export function ChannelSettingsPage() {
         text: err instanceof Error ? err.message : "清除失败",
       });
     }
-  }, [deleteMutation]);
+  }, [selectedChannelId, deleteMutation]);
 
-  const statusBadge = (() => {
-    if (!wecomInfo) return null;
-    if (wecomInfo.enabled && wecomInfo.running) {
+  const statusBadge = useMemo(() => {
+    if (!channelInfo) return null;
+    if (channelInfo.enabled && channelInfo.running) {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
           <span className="size-1.5 rounded-full bg-green-500" />
@@ -107,7 +137,7 @@ export function ChannelSettingsPage() {
         </span>
       );
     }
-    if (wecomInfo.enabled && !wecomInfo.running) {
+    if (channelInfo.enabled && !channelInfo.running) {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
           <span className="size-1.5 rounded-full bg-amber-500" />
@@ -115,7 +145,7 @@ export function ChannelSettingsPage() {
         </span>
       );
     }
-    if (wecomInfo.bot_id_exists || wecomInfo.bot_secret_exists) {
+    if (Object.values(channelInfo.credentials).some((v) => v)) {
       return (
         <span className="text-muted-foreground inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
           已配置
@@ -123,7 +153,7 @@ export function ChannelSettingsPage() {
       );
     }
     return null;
-  })();
+  }, [channelInfo]);
 
   return (
     <>
@@ -147,91 +177,84 @@ export function ChannelSettingsPage() {
           </div>
         ) : (
           <div className="space-y-5 py-2">
+            {/* Channel Selector */}
+            <div className="max-w-xs">
+              <Select
+                value={selectedChannelId}
+                onValueChange={handleChannelChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择渠道" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CHANNELS.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Credentials Form Card */}
             <div className="rounded-lg border p-4 space-y-4">
-              {/* Header */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <span>企业微信 Bot</span>
-                </div>
+                <span className="text-sm font-medium">
+                  {selectedMeta.name}
+                </span>
                 {statusBadge}
               </div>
 
-              {/* Bot ID */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Bot ID</label>
-                {wecomInfo?.bot_id_exists && (
-                  <div className="text-muted-foreground mb-1 text-xs">
-                    当前:{" "}
-                    <code className="bg-muted rounded px-1 py-0.5">
-                      {wecomInfo.bot_id_masked || "****"}
-                    </code>
+              {selectedMeta.credentialFields.map((field) => (
+                <div key={field.key} className="space-y-2">
+                  <label className="text-sm font-medium">{field.label}</label>
+                  {channelInfo?.credentials?.[field.key] && (
+                    <div className="text-muted-foreground mb-1 text-xs">
+                      当前:{" "}
+                      <code className="bg-muted rounded px-1 py-0.5">
+                        {channelInfo.credentials[field.key] || "****"}
+                      </code>
+                    </div>
+                  )}
+                  <div className="relative max-w-md">
+                    <Input
+                      type={showFields[field.key] ? "text" : "password"}
+                      placeholder={`输入${field.label}`}
+                      value={formValues[field.key] ?? ""}
+                      onChange={(e) =>
+                        setFormValues((f) => ({
+                          ...f,
+                          [field.key]: e.target.value,
+                        }))
+                      }
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowFields((s) => ({
+                          ...s,
+                          [field.key]: !s[field.key],
+                        }))
+                      }
+                      className="text-muted-foreground hover:text-foreground absolute right-3 top-1/2 -translate-y-1/2"
+                      tabIndex={-1}
+                    >
+                      {showFields[field.key] ? (
+                        <EyeOffIcon className="size-4" />
+                      ) : (
+                        <EyeIcon className="size-4" />
+                      )}
+                    </button>
                   </div>
-                )}
-                <div className="relative max-w-md">
-                  <Input
-                    type={showBotId ? "text" : "password"}
-                    placeholder={
-                      wecomInfo?.bot_id_exists
-                        ? "输入新 Bot ID 替换现有值"
-                        : "输入企业微信 Bot ID"
-                    }
-                    value={botId}
-                    onChange={(e) => setBotId(e.target.value)}
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowBotId(!showBotId)}
-                    className="text-muted-foreground hover:text-foreground absolute right-3 top-1/2 -translate-y-1/2"
-                    tabIndex={-1}
-                  >
-                    {showBotId ? (
-                      <EyeOffIcon className="size-4" />
-                    ) : (
-                      <EyeIcon className="size-4" />
-                    )}
-                  </button>
                 </div>
-              </div>
-
-              {/* Bot Secret */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Bot Secret</label>
-                <div className="relative max-w-md">
-                  <Input
-                    type={showBotSecret ? "text" : "password"}
-                    placeholder={
-                      wecomInfo?.bot_secret_exists
-                        ? "输入新 Secret 替换现有值"
-                        : "输入企业微信 Bot Secret"
-                    }
-                    value={botSecret}
-                    onChange={(e) => setBotSecret(e.target.value)}
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowBotSecret(!showBotSecret)}
-                    className="text-muted-foreground hover:text-foreground absolute right-3 top-1/2 -translate-y-1/2"
-                    tabIndex={-1}
-                  >
-                    {showBotSecret ? (
-                      <EyeOffIcon className="size-4" />
-                    ) : (
-                      <EyeIcon className="size-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
+              ))}
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2">
                 <Button
-                  onClick={handleSaveWeCom}
-                  disabled={
-                    (!botId.trim() && !botSecret.trim()) ||
-                    updateMutation.isPending
-                  }
+                  onClick={handleSave}
+                  disabled={!hasAnyValue || updateMutation.isPending}
                 >
                   {updateMutation.isPending && (
                     <Loader2Icon className="mr-1 size-4 animate-spin" />
@@ -240,7 +263,7 @@ export function ChannelSettingsPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={handleVerifyWeCom}
+                  onClick={handleVerify}
                   disabled={verifyMutation.isPending}
                 >
                   {verifyMutation.isPending ? (
@@ -254,7 +277,7 @@ export function ChannelSettingsPage() {
                   size="sm"
                   onClick={() => setDeleteConfirmOpen(true)}
                   disabled={
-                    (!wecomInfo?.bot_id_exists && !wecomInfo?.bot_secret_exists) ||
+                    (!hasCredentials && !hasAnyValue) ||
                     deleteMutation.isPending
                   }
                 >
@@ -290,7 +313,7 @@ export function ChannelSettingsPage() {
                 配置保存后自动启用渠道（修改{" "}
                 <code className="bg-muted rounded px-1 py-0.5 text-[11px]">
                   config.yaml
-                </code>{" "}
+                </code>
                 ），清除配置后自动禁用。
               </div>
             </div>
@@ -313,13 +336,13 @@ export function ChannelSettingsPage() {
               </button>
             </div>
             <p className="text-muted-foreground text-sm mb-6">
-              确定清除企业微信 Bot 的全部配置？操作不可撤销。
+              确定清除 {selectedMeta.name} 的全部配置？操作不可撤销。
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
                 取消
               </Button>
-              <Button variant="destructive" onClick={handleDeleteWeCom}>
+              <Button variant="destructive" onClick={handleDelete}>
                 确认清除
               </Button>
             </div>

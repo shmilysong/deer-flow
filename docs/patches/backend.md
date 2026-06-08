@@ -877,3 +877,50 @@ ls deerflow_extensions/data_collection/sitecustomize.py 2>&1 | grep "No such fil
 # === T7d: entrypoint.sh 不再有 sitecustomize symlink ===
 grep -n "sitecustomize" deerflow_extensions/entrypoint.sh 2>/dev/null || echo "sitecustomize 已清除"
 ```
+
+
+---
+
+## 2026-06-08: 渠道凭据模型通用化 + 多渠道支持（飞书/钉钉/微信）
+
+### `deerflow_extensions/env_settings/router.py` — 凭据模型重构 + _CHANNEL_META 扩展
+
+**风险**: ✅ 零（全在扩展目录）
+
+**改动**:
+
+1. **Pydantic 模型通用化**：
+   - `ChannelInfo`：`bot_id_exists`/`bot_id_masked`/`bot_secret_exists` → `credentials: dict[str, str]`
+   - `ChannelUpdateRequest`：`bot_id`/`bot_secret` → `credentials: dict[str, str]`
+   - `ChannelVerifyRequest`：`bot_id`/`bot_secret` → `credentials: dict[str, str]`
+
+2. **_CHANNEL_META 扩展**：
+   - 新增 `feishu`（app_id/app_secret）、`dingtalk`（client_id/client_secret）、`wechat`（bot_token）
+   - 每个条目新增 `credential_fields` 元数据列表
+   - `_build_channel_info()` 改为动态遍历 credential_fields
+   - `_sanitize_channel_input()` → `_sanitize_channel_credentials()` 泛化
+
+3. **连通性测试函数**：
+   - `_test_feishu_connect()` — 使用 lark-oapi REST API 验证凭据
+   - `_test_dingtalk_connect()` — 调用钉钉 gettoken API 验证
+   - `_test_wechat_connect()` — 格式验证（长度 >= 8）
+   - `_channel_test_fns` 分发字典扩展为 4 个渠道
+
+4. **PUT/DELETE/verify 泛化**：
+   - 移除所有 `"wecom"` 硬编码引用
+   - Test-Before-Switch 通过 `_channel_test_fns[channel_id]` 动态分发
+   - `service._config[channel_id]` 动态更新
+
+### 前端同步改动
+
+**文件**: `frontend/extensions/env-settings/`
+- 新建 `channels.ts` — 4 个国内渠道元数据（与后端 _CHANNEL_META 一一对应）
+- `types.ts` — `ChannelInfo`/`ChannelUpdateRequest` 凭据字典化
+- `api.ts` — `verifyChannel()` 参数改为 `credentials` 字典
+- `hooks.ts` — `useVerifyChannel` 适配新签名
+- `channel-settings-page.tsx` — 多渠道选择器 + 动态凭据表单渲染
+
+**验证命令**:
+```bash
+cd backend && uv run pytest deerflow_extensions/env_settings/tests/ -v
+cd frontend && npx tsc --noEmit
