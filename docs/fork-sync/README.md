@@ -197,34 +197,55 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 
 | 文件 | 风险等级 | 说明 |
 |------|---------|------|
-| `backend/app/gateway/app.py` | 🔴 **高** | ADS 认证 + 数据采集注入点 |
-| `backend/app/gateway/deps.py` | 🔴 **高** | `get_config` 函数 + `user_from_state` |
-| `backend/app/gateway/routers/auth.py` | 🔴 **高** | ADS 登录路由 |
-| `frontend/next.config.js` | 🟡 中 | `beforeFiles` 重写规则 |
-| `frontend/middleware.ts` | 🟡 中 | PUBLIC_PATHS 白名单 |
-| `backend/packages/harness/.../storage.py` | 🟡 中 | per-user 内存隔离 |
-| `docker/docker-compose-dev.yaml` | 🟡 中 | 自定义卷挂载 |
+| `backend/app/gateway/app.py` | 🔴 **高** | Boot Loader 统一注入点（影响全部 4 个扩展） |
+| `backend/app/gateway/auth_middleware.py` | 🔴 **高** | ADS JWT 内联解码 + exp 验证 + `uuid5()` 确定性 ID |
+| `backend/app/gateway/csrf_middleware.py` | 🔴 **高** | `/login/ads` CSRF 豁免 + 跨源检查条件化 |
+| `backend/app/gateway/deps.py` | 🔴 **高** | `user_from_state` 守卫 |
+| `backend/app/gateway/routers/auth.py` | 🔴 **高** | ADS 登录路由 + `ads_token` cookie 清除 |
+| `backend/deerflow_entry.py` | 🔴 **高** | PyInstaller 入口扩展注入 + frozen/dev 路径修复 |
+| `frontend/next.config.js` | 🟡 中 | `beforeFiles` 重写规则（路由格式变更） |
+| `frontend/middleware.ts` | 🟡 中 | PUBLIC_PATHS 白名单 + auth guard 内联 |
+| `frontend/src/core/auth/server.ts` | 🟢 低 | E2E 后门 NODE_ENV 门控 |
+| `frontend/src/components/workspace/settings/settings-dialog.tsx` | 🟡 中 | 4 处 EXTENSION SLOT 插槽 |
+| `frontend/src/components/workspace/workspace-nav-menu.tsx` | 🟡 中 | 扩展注册表集成 + 隐藏菜单按钮 |
+| `frontend/src/components/workspace/settings/account-settings-page.tsx` | 🟢 低 | ADS 字段隐藏注释 |
+| `frontend/src/app/workspace/workspace-content.tsx` | 🟢 低 | MobileSidebarTrigger 注入 |
+| `frontend/src/components/workspace/input-box.tsx` | 🟢 低 | input-suggestions 动态注册 import |
+| `frontend/src/components/query-client-provider.tsx` | 🟢 低 | TanStack Query 缓存配置 |
+| `docker/docker-compose-dev.yaml` | 🟡 中 | 自定义卷挂载 + PYTHONPATH + ADS env |
 | `docker/docker-compose.yaml` | 🟡 中 | 自定义卷挂载 |
 
 ---
 
 ## 侵入点清单（必须保护的自定义代码）
 
-以下 11 个侵入点是本 Fork 的核心自定义，**任何同步操作都不能冲掉**：
+以下 19 个侵入点是本 Fork 的核心自定义，**任何同步操作都不能冲掉**：
 
-| # | 位置 | 功能 | 保护方式 |
-|---|------|------|---------|
-| 1 | `backend/app/gateway/app.py:49-62` | 数据采集系统注入 | import + try/except 加载 |
-| 2 | `backend/app/gateway/app.py:345-359` | ADS 认证注入 | import + try/except 加载 |
-| 3 | `backend/app/gateway/auth_middleware.py` | `/login/ads` 路径放行 | PUBLIC_PATHS 数组 |
-| 4 | `backend/app/gateway/csrf_middleware.py` | `/login/ads` CSRF 豁免 | exempt_paths 数组 |
-| 5 | `backend/app/gateway/deps.py` | `user_from_state()` 上下文 | 独立函数 |
-| 6 | `backend/app/gateway/routers/auth.py` | `ads_token` cookie 清除 | 新增 cookie 删除 |
-| 7 | `frontend/next.config.js` | ADS 登录重定向 | `beforeFiles` 块 |
-| 8 | `frontend/middleware.ts` | 公开路径白名单 | `PUBLIC_PATHS` 数组 |
-| 9 | `frontend/src/core/auth/types.ts` | `ads-login` 构建 URL | buildLoginUrl 函数 |
-| 10 | `docker/docker-compose-dev.yaml` | `deerflow_extensions` 挂载 | volumes 配置 |
-| 11 | `docker/docker-compose.yaml` | `training_logs` 挂载 | volumes 配置 |
+| # | 位置 | 功能 | 保护方式 | 风险 |
+|---|------|------|---------|------|
+| **后端核心文件** |
+| 1 | `backend/app/gateway/app.py` | `boot_all_extensions()` 统一注入，运行全部扩展 | 统一调用 + try/except | ✅ 低 |
+| 2 | `backend/app/gateway/auth_middleware.py` | `/login/ads` 放行 + ADS JWT 内联解码(~25行) + exp 验证 + `uuid5()` ID | 内联代码 | ✅ 低 |
+| 3 | `backend/app/gateway/csrf_middleware.py` | `/login/ads` CSRF 豁免 + 跨源检查条件化 | 内联代码 + frozenset | ✅ 低 |
+| 4 | `backend/app/gateway/deps.py` | `user_from_state` 守卫，先查 request.state.user | 函数守卫(5行) | ✅ 低 |
+| 5 | `backend/app/gateway/routers/auth.py` | `ads_token` cookie 清除 | cookie 删除行 | ✅ 低 |
+| 6 | `backend/deerflow_entry.py` | `boot_topic_guardrail_early()` + frozen/dev 双路径修复 | 统一调用 + try/except | 🔴 高 |
+| **前端核心文件** |
+| 7 | `frontend/next.config.js` | `beforeFiles` ADS 登录重定向 | beforeFiles 块 | 🟡 中 |
+| 8 | `frontend/middleware.ts` | `PUBLIC_PATHS` + auth guard 内联(~37行) | 全文件重写 | 🟡 中 |
+| 9 | `frontend/src/core/auth/types.ts` | `buildLoginUrl()` → `/ads-login` | 1 行 URL 修改 | ✅ 低 |
+| 10 | `frontend/src/core/auth/server.ts` | E2E 后门 NODE_ENV 门控 | 条件守卫 | ✅ 低 |
+| 11 | `frontend/src/components/workspace/settings/settings-dialog.tsx` | 4 处 EXTENSION SLOT（additionalSections + hiddenSectionIds） | 扩展插槽 | 🟡 中 |
+| 12 | `frontend/src/components/workspace/workspace-nav-menu.tsx` | `getSettingsExtensions()` + 隐藏菜单按钮(S5) | 注册表 + 注释隐藏 | 🟡 中 |
+| 13 | `frontend/src/components/workspace/settings/account-settings-page.tsx` | ADS 字段隐藏(email/role + 修改密码) | 注释隐藏 | ✅ 低 |
+| 14 | `frontend/src/app/workspace/workspace-content.tsx` | MobileSidebarTrigger 注入(2行) | JSX 行追加 | ✅ 低 |
+| 15 | `frontend/src/components/workspace/input-box.tsx` | input-suggestions 动态注册 import | import 行 + 动态渲染 | ✅ 低 |
+| 16 | `frontend/src/components/query-client-provider.tsx` | TanStack Query 缓存配置(gcTime/staleTime) | 配置对象 | ✅ 低 |
+| **Docker 文件** |
+| 17 | `docker/docker-compose-dev.yaml` | `deerflow_extensions` 和 `training_logs` 挂载 + PYTHONPATH + ADS env | volumes 配置 | ✅ 低 |
+| 18 | `docker/docker-compose.yaml` | `deerflow_extensions` 和 `training_logs` 挂载 | volumes 配置 | ✅ 低 |
+| **配置文件** |
+| 19 | `.env.example` | ADS_BASE_URL + ADS_MCP_CONFIG_PATH 配置示例 | 行追加 | ✅ 极低 |
 
 ---
 
@@ -232,10 +253,11 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 
 同步完成后按以下顺序验证：
 
-- [ ] 11 个侵入点 grep 检查通过
-- [ ] `deerflow_extensions/` 目录完整（与 backup-main 一致）
+- [ ] 19 个侵入点 grep 检查通过（详见 `docs/patches/` 中各模块的验证命令）
+- [ ] `deerflow_extensions/` + `frontend/extensions/` 目录完整（与 backup-main 一致）
 - [ ] 后端全量 `.py` 语法检查通过（`python3 -m py_compile`）
 - [ ] 关键文件的本地自定义引用计数正常（`app_config`、`user_id` 等）
+- [ ] 前端核心区域扩展插槽、注释隐藏未被覆写（`EXTENSION SLOT`、`EXTENSION IMPORT`、`🚫 以下菜单项` 等标记存在）
 - [ ] 合并残留扫描：无重复位置参数/keyword/import/函数定义
 - [ ] 无未解决的冲突标记残留（`grep -r "<<<<<<<" backend/ frontend/` 为空）
 - [ ] `.env` 中 `NEXT_PUBLIC_BACKEND_BASE_URL` 保持注释状态

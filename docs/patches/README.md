@@ -28,7 +28,7 @@
 | 模块 | 文件 | 包含补丁 | 说明 |
 |------|------|---------|------|
 | **后端** | [backend.md](backend.md) | D1, A1, A2, A3, A3b, A10, T1, T5, T6, T7 | `app.py`、`auth_middleware.py`、`csrf_middleware.py`、`routers/auth.py`、`deps.py`、`deerflow_entry.py`、`boot.py` |
-| **前端** | [frontend.md](frontend.md) | A6, A7, A8, S1, S2, S3, S4, IS1 | `next.config.js`、`middleware.ts`、`types.ts`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx`、`account-settings-page.tsx`、`input-box.tsx` |
+| **前端** | [frontend.md](frontend.md) | A6, A7, A8, A10, A11, A12, S1, S2, S3, S4, S5, IS1, WS | `next.config.js`、`middleware.ts`、`types.ts`、`server.ts`、`workspace-content.tsx`、`query-client-provider.tsx`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx`、`account-settings-page.tsx`、`input-box.tsx`、`env-settings/` |
 | **Docker** | [docker.md](docker.md) | D2, D3, A4 | `docker-compose-dev.yaml`、`docker-compose.yaml` |
 | **脚本** | [scripts.md](scripts.md) | D4 | `entrypoint.sh` |
 | **配置** | [config.md](config.md) | A9 | `.env.example` |
@@ -163,6 +163,15 @@ grep -n "isinstance.*SensitiveWordMiddleware" deerflow_extensions/patch_manager.
 
 echo "=== IS1: input-box.tsx 扩展 import ==="
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/input-box.tsx
+
+echo "=== A11: workspace-content.tsx MobileSidebarTrigger ==="
+grep -n "MobileSidebarTrigger" frontend/src/app/workspace/workspace-content.tsx
+
+echo "=== A12: query-client-provider.tsx 缓存配置 ==="
+grep -n "gcTime\|staleTime" frontend/src/components/query-client-provider.tsx
+
+echo "=== S5: workspace-nav-menu.tsx 隐藏菜单 ==="
+grep -c "🚫 以下菜单项被隐藏" frontend/src/components/workspace/workspace-nav-menu.tsx
 
 echo "=== T7: boot.py 统一 Boot Loader ==="
 ls -la deerflow_extensions/boot.py

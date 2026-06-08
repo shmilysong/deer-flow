@@ -362,6 +362,34 @@ ls frontend/extensions/mobile-sidebar/mobile-sidebar-trigger.tsx
 
 ---
 
+## A12：`query-client-provider.tsx` — TanStack Query 缓存配置（2026-04-17）
+
+**文件**: `frontend/src/components/query-client-provider.tsx`
+**行号**: L7-L14
+**风险**: ✅ 极低（纯配置修改，不改任何逻辑）
+
+**改动**:
+
+```diff
+- const queryClient = new QueryClient();
++ const queryClient = new QueryClient({
++   defaultOptions: {
++     queries: {
++       gcTime: 1000 * 60 * 3,      // 3 分钟
++       staleTime: 1000 * 60,        // 1 分钟
++       refetchOnWindowFocus: false,
++     },
++   },
++ });
+```
+
+**原因**: 
+- 默认 `gcTime`（5 分钟）和 `staleTime`（0 秒）导致前端频繁请求后端 API，增加服务器负载和内存占用
+- 对非实时数据（如模型列表、设置）没必要每次 focus 都重新请求
+- 此项已在 `docs/operations/OPERATIONS.md` 中作为内存优化配置记录
+
+---
+
 ## 验证命令
 
 ```bash
@@ -373,6 +401,15 @@ grep -n "ads_token\|PUBLIC_PATHS" frontend/middleware.ts
 
 # === A8: types.ts buildLoginUrl ===
 grep -n "buildLoginUrl\|ads-login" frontend/src/core/auth/types.ts
+
+# === A10: server.ts NODE_ENV gate ===
+grep -n "NODE_ENV.*test\|DEER_FLOW_AUTH_DISABLED" frontend/src/core/auth/server.ts
+
+# === A11: workspace-content.tsx MobileSidebarTrigger ===
+grep -n "MobileSidebarTrigger" frontend/src/app/workspace/workspace-content.tsx
+
+# === A12: query-client-provider.tsx ===
+grep -n "gcTime\|staleTime" frontend/src/components/query-client-provider.tsx
 
 # === S1a: settings-dialog.tsx EXTENSION SLOT ===
 grep -c "EXTENSION SLOT" frontend/src/components/workspace/settings/settings-dialog.tsx
@@ -391,6 +428,9 @@ grep -n "getSettingsExtensions" frontend/src/components/workspace/workspace-nav-
 
 # === S3b: workspace-nav-menu.tsx EXTENSION IMPORT ===
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/workspace-nav-menu.tsx
+
+# === S5: 隐藏菜单注释 ===
+grep -c "🚫 以下菜单项被隐藏" frontend/src/components/workspace/workspace-nav-menu.tsx
 
 # === IS1: input-box.tsx EXTENSION IMPORT ===
 grep -n "EXTENSION IMPORT" frontend/src/components/workspace/input-box.tsx
