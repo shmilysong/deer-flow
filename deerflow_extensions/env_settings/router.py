@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -364,9 +365,30 @@ async def _test_wecom_connect(bot_id: str, bot_secret: str) -> tuple[bool, str]:
     try:
         from aibot import WSClient, WSClientOptions
         client = WSClient(WSClientOptions(bot_id=bot_id, secret=bot_secret))
+
+        loop = asyncio.get_running_loop()
+        auth_future = loop.create_future()
+
+        def _on_authenticated():
+            if not auth_future.done():
+                auth_future.set_result(True)
+
+        def _on_error(error: Exception):
+            if not auth_future.done():
+                auth_future.set_exception(error)
+
+        client.on("authenticated", _on_authenticated)
+        client.on("error", _on_error)
+
         await client.connect()
-        client.disconnect()
-        return (True, "连接成功")
+
+        try:
+            await asyncio.wait_for(auth_future, timeout=10.0)
+            return (True, "连接成功")
+        except asyncio.TimeoutError:
+            return (False, "认证超时，请检查 Bot ID 和 Secret")
+        finally:
+            client.disconnect()
     except ImportError:
         return (False, "wecom-aibot-python-sdk 未安装")
     except Exception as e:
