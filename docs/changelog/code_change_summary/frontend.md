@@ -842,3 +842,16 @@ export function MarkdownContent({
 - `frontend/extensions/env-settings/types.ts` — 新增 3 个渠道类型
 - `frontend/extensions/env-settings/channel-settings-page.tsx` — **新文件**，独立渠道配置标签页
 - `frontend/extensions/env-settings/extension.ts` — 注册两个扩展（`api` + `channels`）
+
+---
+
+## 2026-06-08: 渠道凭据模型通用化 + 多渠道支持
+
+### 零侵入扩展（合入 env-settings）
+
+**修改文件**:
+- `frontend/extensions/env-settings/channels.ts` — **新文件**，4 个国内 IM 渠道元数据（wecom/feishu/dingtalk/wechat）
+- `frontend/extensions/env-settings/types.ts` — `ChannelInfo`/`ChannelUpdateRequest` 凭据字典化，新增 `ChannelVerifyRequest`
+- `frontend/extensions/env-settings/api.ts` — `verifyChannel()` 参数改为 `credentials` 字典
+- `frontend/extensions/env-settings/hooks.ts` — `useVerifyChannel` 适配新签名
+- `frontend/extensions/env-settings/channel-settings-page.tsx` — 从硬编码 WeCom 表单改为多渠道选择器 + 动态凭据表单渲染

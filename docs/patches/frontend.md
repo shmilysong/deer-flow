@@ -523,3 +523,34 @@ const createSuggestions = allSuggestions.filter(s => s.group === "create");
 ### WS5 — extension.ts 双注册
 
 注册两个扩展：`id:"api"`（API Keys）+ `id:"channels"`（渠道配置）。
+
+### WS6 — 多渠道扩展（2026-06-08）
+
+**文件**: `frontend/extensions/env-settings/`
+**风险**: ✅ 极低（扩展目录，零侵入）
+
+将渠道配置从 WeCom 专用改为多渠道（企业微信/飞书/钉钉/微信）通用界面。
+
+#### WS6a — channels.ts 新建渠道元数据
+
+新增文件，定义 4 个国内 IM 渠道的 `ChannelMeta` 元数据（`credentialFields` 凭据字段列表），前端据此动态渲染输入表单。
+
+#### WS6b — types.ts 凭据字典化
+
+`ChannelInfo.bot_id_exists`/`bot_id_masked`/`bot_secret_exists` 合并为 `credentials: Record<string, string>`，`ChannelUpdateRequest` 同理，新增 `ChannelVerifyRequest`。
+
+#### WS6c — api.ts verifyChannel 签名更新
+
+`verifyChannel(channel, botId, botSecret)` → `verifyChannel(channel, credentials)`。
+
+#### WS6d — hooks.ts 适配
+
+`useVerifyChannel` mutation 参数改为 `{ channel, credentials }`。
+
+#### WS6e — channel-settings-page.tsx 多渠道重构
+
+- 新增渠道选择器（Select 下拉框，从 `CHANNELS` 元数据渲染）
+- 凭据表单根据 `selectedMeta.credentialFields` 动态渲染
+- 眼睛按钮按 `field.key` 独立控制
+- 删除确认弹窗引用 `selectedMeta.name`
+- 切换渠道时重置 formValues/showFields

@@ -910,6 +910,7 @@ grep -n "sitecustomize" deerflow_extensions/entrypoint.sh 2>/dev/null || echo "s
    - 移除所有 `"wecom"` 硬编码引用
    - Test-Before-Switch 通过 `_channel_test_fns[channel_id]` 动态分发
    - `service._config[channel_id]` 动态更新
+   - `_set_channel_enabled_in_config()` 补齐缺失的凭据引用字段（如 `app_id: $FEISHU_APP_ID`），确保 ChannelService 能找到凭据
 
 ### 前端同步改动
 
