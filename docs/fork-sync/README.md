@@ -380,15 +380,22 @@ git status --short   # 确保无未暂存修改
 git diff --stat      # 确认差异在预期范围内
 ```
 
-### 教训 6：场景 C 冲突后必须扫描"重复参数"型残留
+### 教训 6：禁止"无脑合并双方"—冲突标记清除不等于去重完成
 
-**问题**：`routers/thread_runs.py` 和 `routers/runs.py` 中 `list_messages_by_run()` 的调用传入了 4 个位置参数（`thread_id, run_id, thread_id, run_id`），但函数签名只接受 2 个。这个重复参数在冲突标记清除时被遗漏，导致前端调用 `/api/threads/*/runs/*/messages` 时后端 500，浏览器控制台报 `JSON.parse` 错误。
+**问题**：前两次同步后，多处文件出现重复代码。典型案例如下：
 
-**根因**：场景 C 冲突中，上游在函数调用的第 1-2 行加了新参数，本地也在第 1-2 行改了不同的东西。手动合并时两个版本被拼接在一起没有去重——参数被写了两次但肉眼很难发现。
+| 类型 | 具体表现 | 后果 |
+|------|---------|------|
+| **参数重复** | `list_messages_by_run(thread_id, run_id, thread_id, run_id)` — 参数被写了两遍 | 后端 500，前端 JSON.parse 报错 |
+| **import 重复** | `from sqlalchemy import select` 出现两次 | 语法正确但代码冗余 |
+| **语句重复** | 两个 `model_instance = model_class(...)` 拼接行 | 后者覆盖前者，逻辑错误 |
+| **JSX 重复** | 两个 `className` 或两个同类型标签嵌套 | pnpm build 失败 |
 
-**易发模式**：
+**根因**：冲突解决的思维误区——开发者看到 `<<<<<<< HEAD / ======= / >>>>>>>` 标记后，第一反应是"两边都要保留"。但场景 C 冲突的本质是双方在同一位置做了不同修改，机械保留两行必然产生重复。
+
+**易发模式**（参数重复是其中最隐蔽的一种）：
 ```python
-# 合并残留的典型模式：调用参数写了两遍
+# 上游在第1-2行加了参数，本地也在第1-2行改了不同东西
 await event_store.list_messages_by_run(
     thread_id,      # 上游版本
     run_id,
@@ -397,15 +404,42 @@ await event_store.list_messages_by_run(
 )
 ```
 
-**预防**：在 Step 6 中已加入了自动化扫描脚本。另一个快速检查方法：
+**预防**——解决冲突时的四步心法：
 
-```bash
-# 检查函数调用中是否出现重复的变量名参数（残留特征）
-grep -rnP "\.(\w+)\(\s*\w+,\s*\w+,\s*\w+,\s*\w+" backend/app/ --include="*.py" \
-  | grep -v "__pycache__" | grep -v "test_"
+```
+第1步：理解双方各自做了什么（读 `git show <hash> -- <file>`，不要只读冲突标记）
+第2步：判断冲突区的代码是"添加"还是"修改"
+  - 上游添加 + 本地添加 → 可能都要（但要检查是否功能重复）
+  - 上游修改 + 本地修改 → 必须手动合并，不能机械保留两行
+  - 上游删除 + 本地修改 → 评估上游删的理由，决定保留谁
+第3步：清除冲突标记后，审查整个函数/代码块
+  - 有没有同类语句出现了两遍？（如两个 `model_instance =`）
+  - 有没有同一个 import 出现了两次？
+  - 如果是函数调用参数，参数个数是否比函数签名多？
+第4步：运行自动化扫描脚本
 ```
 
-如果输出包含 `thread_id, run_id, thread_id` 或类似 4 个以上位置参数的调用行，大概率是合并残留。
+**金句**：
+
+> **冲突标记清除了 ≠ 合并正确了。** 清除标记只是第一步，去重才是真正的合并。宁可花 1 分钟理解上游改了什么，也不要花 1 小时 debug 重复代码导致的怪 bug。
+
+**自动化扫描**（在 Step 6 中执行）：
+
+```bash
+# 扫描重复位置参数（参数重复的特化检测）
+echo "=== [RESIDUE] 重复位置参数 ==="
+grep -rnP "\.(\w+)\(\s*\w+,\s*\w+,\s*\w+,\s*\w+" backend/app/ --include="*.py" \
+  | grep -v "__pycache__" | grep -v "test_" || echo "(none)"
+
+# 对争议文件做"同类语句出现次数"快照
+echo "=== [BASELINE] 语句出现次数 ==="
+for f in backend/app/gateway/app.py backend/packages/harness/deerflow/models/factory.py; do
+    echo "$f: model_instance=$(grep -c 'model_instance' "$f")"
+    echo "$f: from sqlalchemy import select=$(grep -c 'from sqlalchemy import select' "$f")"
+done
+```
+
+如果输出中 `model_instance` > 1 或 `from sqlalchemy import select` > 1，说明存在重复残留。
 
 ---
 
@@ -414,6 +448,22 @@ grep -rnP "\.(\w+)\(\s*\w+,\s*\w+,\s*\w+,\s*\w+" backend/app/ --include="*.py" \
 ### 定期同步频率
 
 建议每 1-2 个月同步一次上游变更，避免累积过多冲突。
+
+### 下次同步计划（2026-06-15 前后）
+
+| 项目 | 内容 |
+|------|------|
+| **上次同步** | 2026-06-01，HEAD `be7a1685` |
+| **预计提交范围** | 上次同步之后 ~6月8日前的新提交（约 37 个） |
+| **涉及侵入点** | 19 个（见上方清单） |
+| **备份分支** | `backup-main`（当前 `88da215f`，已推送到 origin） |
+| **执行计划** | `.trae/documents/fork-sync-20260609-execution-plan.md` |
+
+同步前注意事项：
+- 先 `git fetch upstream` 重新查询提交（用 `git log --after="2026-06-01" --before="2026-06-09"` + `git merge-base --is-ancestor` 双重确认）
+- 确保 `git branch -f backup-main main` + `git push origin backup-main --force`
+- cherry-pick 过程中遇冲突遵循"四步心法"（见教训 6），禁止无脑合并
+- 同步完成后更新本 README 的历史同步记录表
 
 ### 冲突记录
 
