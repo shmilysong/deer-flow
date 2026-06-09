@@ -34,8 +34,9 @@ if _src_dir not in sys.path:
 from router import (
     _mask_value,
     _read_env_value,
-    _write_env_value,
+    _set_channel_enabled_in_config,
     _unset_env_value,
+    _write_env_value,
     _sanitize_channel_credentials,
 )
 
@@ -302,6 +303,89 @@ class TestSanitizeChannelCredentials:
         assert "extra_field" not in cleaned
         assert cleaned["bot_id"] == "id"
         assert cleaned["bot_secret"] == "secret"
+
+
+# ---------------------------------------------------------------------------
+# UT15-UT20: _set_channel_enabled_in_config —— config.yaml 启用/禁用管理
+# ---------------------------------------------------------------------------
+
+
+class TestSetChannelEnabledInConfig:
+    """_set_channel_enabled_in_config —— 启用时补齐凭据，禁用时清理凭据"""
+
+    @pytest.fixture
+    def config_file(self, tmp_path):
+        """创建临时 config.yaml 并 mock _get_config_path 指向它。"""
+        cfg_path = tmp_path / "config.yaml"
+        cfg_path.write_text("channels:\n  wecom:\n    enabled: false\n")
+        with mock.patch("router._get_config_path", return_value=str(cfg_path)):
+            yield cfg_path
+
+    def _read_cfg(self, cfg_path):
+        import yaml
+        return yaml.safe_load(cfg_path.read_text())
+
+    # -- enable variants --
+
+    def test_enable_adds_credential_fields(self, config_file):
+        """UT15: 启用渠道时自动补齐凭据引用字段"""
+        _set_channel_enabled_in_config("wecom", enabled=True)
+        cfg = self._read_cfg(config_file)
+        wecom = cfg["channels"]["wecom"]
+        assert wecom["enabled"] is True
+        assert wecom["bot_id"] == "$WECOM_BOT_ID"
+        assert wecom["bot_secret"] == "$WECOM_BOT_SECRET"
+
+    def test_enable_idempotent_no_duplicate(self, config_file):
+        """UT16: 已补齐的渠道再次启用不重复添加"""
+        _set_channel_enabled_in_config("wecom", enabled=True)
+        _set_channel_enabled_in_config("wecom", enabled=True)
+        cfg = self._read_cfg(config_file)
+        wecom = cfg["channels"]["wecom"]
+        assert list(wecom.keys()) == ["enabled", "bot_id", "bot_secret"]
+
+    # -- disable variants --
+
+    def test_disable_removes_credential_fields(self, config_file):
+        """UT17: 禁用渠道时自动清理凭据引用字段"""
+        _set_channel_enabled_in_config("wecom", enabled=True)
+        _set_channel_enabled_in_config("wecom", enabled=False)
+        cfg = self._read_cfg(config_file)
+        wecom = cfg["channels"]["wecom"]
+        assert wecom["enabled"] is False
+        assert "bot_id" not in wecom
+        assert "bot_secret" not in wecom
+
+    def test_disable_idempotent_already_clean(self, config_file):
+        """UT18: 已清理的渠道再次禁用不报错"""
+        _set_channel_enabled_in_config("wecom", enabled=False)
+        cfg = self._read_cfg(config_file)
+        wecom = cfg["channels"]["wecom"]
+        assert wecom["enabled"] is False
+        assert "bot_id" not in wecom
+
+    def test_disable_channel_without_meta_ok(self, config_file):
+        """UT19: 禁用 _CHANNEL_META 中不存在的渠道不报错"""
+        cfg_path = config_file
+        import yaml
+        raw = yaml.safe_load(cfg_path.read_text()) or {}
+        raw["channels"]["unknown"] = {"enabled": True, "some_key": "val"}
+        cfg_path.write_text(yaml.dump(raw))
+        _set_channel_enabled_in_config("unknown", enabled=False)
+        cfg = self._read_cfg(cfg_path)
+        assert cfg["channels"]["unknown"]["enabled"] is False
+        assert cfg["channels"]["unknown"].get("some_key") == "val"
+
+    def test_enable_then_disable_then_enable(self, config_file):
+        """UT20: 启用→禁用→再启用，凭据字段可重建"""
+        _set_channel_enabled_in_config("wecom", enabled=True)
+        _set_channel_enabled_in_config("wecom", enabled=False)
+        _set_channel_enabled_in_config("wecom", enabled=True)
+        cfg = self._read_cfg(config_file)
+        wecom = cfg["channels"]["wecom"]
+        assert wecom["enabled"] is True
+        assert wecom["bot_id"] == "$WECOM_BOT_ID"
+        assert wecom["bot_secret"] == "$WECOM_BOT_SECRET"
 
 
 # ---------------------------------------------------------------------------
