@@ -68,6 +68,7 @@ config.yaml.bak
 release/
 
 .trae/
+.qoder/
 ads-agent-mcp/
 ads-agent-mcp/.ads-mcp/config.json
 training_logs/*
