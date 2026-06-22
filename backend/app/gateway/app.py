@@ -80,8 +80,6 @@ async def _ensure_admin_user(app: FastAPI) -> None:
     """
     from sqlalchemy import select
 
-    from sqlalchemy import select
-
     from app.gateway.deps import get_local_provider
     from deerflow.persistence.engine import get_session_factory
     from deerflow.persistence.user.model import UserRow
