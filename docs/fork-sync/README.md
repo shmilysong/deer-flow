@@ -111,6 +111,7 @@ grep -c "PUBLIC_PATHS" frontend/middleware.ts
 grep -c "ads-login" frontend/src/core/auth/types.ts
 grep -c "deerflow_extensions" docker/docker-compose-dev.yaml
 grep -c "training_logs" docker/docker-compose.yaml
+grep -c "filelock\|pyahocorasick" backend/pyproject.toml
 ```
 
 ### Step 6: 修复构建错误 + 合并残留扫描
@@ -220,12 +221,13 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 | `frontend/src/components/query-client-provider.tsx` | 🟢 低 | TanStack Query 缓存配置 |
 | `docker/docker-compose-dev.yaml` | 🟡 中 | 自定义卷挂载 + PYTHONPATH + ADS env |
 | `docker/docker-compose.yaml` | 🟡 中 | 自定义卷挂载 |
+| `backend/pyproject.toml` | 🟡 中 | filelock + pyahocorasick 依赖（上游频繁修改） |
 
 ---
 
 ## 侵入点清单（必须保护的自定义代码）
 
-以下 19 个侵入点是本 Fork 的核心自定义，**任何同步操作都不能冲掉**：
+以下 20 个侵入点是本 Fork 的核心自定义，**任何同步操作都不能冲掉**：
 
 | # | 位置 | 功能 | 保护方式 | 风险 |
 |---|------|------|---------|------|
@@ -252,6 +254,8 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 | 18 | `docker/docker-compose.yaml` | `deerflow_extensions` 和 `training_logs` 挂载 | volumes 配置 | ✅ 低 |
 | **配置文件** |
 | 19 | `.env.example` | ADS_BASE_URL + ADS_MCP_CONFIG_PATH 配置示例 | 行追加 | ✅ 极低 |
+| **构建配置** |
+| 20 | `backend/pyproject.toml` | `filelock>=3.0.0` + `pyahocorasick>=2.3.1` 依赖 | 行追加 | 🟡 中 |
 
 ---
 
@@ -281,7 +285,7 @@ git commit -m "Fork sync: N upstream commits + conflict resolutions"
 |------|---------|-----------|--------|--------|------|---------|------|
 | 2026-05-07 | fork 分叉点后 | N/A（预发布） | 128 | 6 | 939aff04 | 上游大版本重构：Gateway 嵌入 LangGraph 运行时、认证系统重构（auth_middleware/CSRF）、Docker 大幅改造（docker.sh/nginx/compose）、Makefile 重构、DingTalk/Serper 等新集成 | [`FORK_SYNC_20260507.md`](FORK_SYNC_20260507.md) |
 | 2026-06-01 | fork 分叉点后 | N/A（预发布） | 274 | 3 | be7a1685 | 上游大量稳定性修复：persistence SQL 化 + run history 持久化 + event store 重构、per-user 隔离完善、DingTalk/Feishu 频道增强、静态 system prompt 优化、run 恢复机制、subagent token 用量追踪、BlockingIO 防护 | [`FORK_SYNC_20260601_CONFLICTS.md`](FORK_SYNC_20260601_CONFLICTS.md) |
-| 2026-06-22 | `dc9efc8d` → `v2.0.0-rc1` | `v2.0.0-rc1` | TBD | TBD | TBD | 同步过程中填写 | [`FORK_SYNC_20260622.md`](FORK_SYNC_20260622.md) |
+| 2026-06-22 | `dc9efc8d` → `v2.0.0-rc1` | `v2.0.0-rc1` | TBD | TBD | TBD | 同步过程中填写 | [`FORK_SYNC_20260622-v2.0.0-rc1.md`](FORK_SYNC_20260622-v2.0.0-rc1.md) |
 
 ---
 
@@ -466,9 +470,9 @@ done
 | **本次目标** | Release Tag `v2.0.0-rc1`（`98127f58`，2026-06-19） |
 | **同步范围** | `dc9efc8d` → `v2.0.0-rc1` |
 | **预计提交数** | ~410 个 |
-| **涉及侵入点** | 19 个（见上方清单） |
+| **涉及侵入点** | 20 个（见上方清单） |
 | **备份分支** | `backup-main`（当前 `88da215f`，已推送到 origin） |
-| **执行计划** | `.trae/documents/fork-sync-20260622-execution-plan.md` |
+| **执行计划** | `.trae/documents/fork-sync-20260622-v2.0.0-rc1-execution-plan.md` |
 
 同步前注意事项：
 - 先 `git fetch upstream --tags` 确保目标 Tag 可用
