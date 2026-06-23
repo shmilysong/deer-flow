@@ -75,40 +75,44 @@ export default function ADSLoginPage() {
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center">
-      <FlickeringGrid
-        className="absolute inset-0 z-0 mask-[url(/images/deer.svg)] mask-size-[100vw] mask-center mask-no-repeat md:mask-size-[72vh]"
-        squareSize={4}
-        gridGap={4}
-        color={actualTheme === "dark" ? "white" : "black"}
-        maxOpacity={0.3}
-        flickerChance={0.25}
+      {/* 背景图片 */}
+      <div
+        className="absolute inset-0 z-0"
+        style={{
+          backgroundImage: "url('/images/login-background.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
       />
-      <div className="border-border/20 bg-background/5 w-full max-w-md space-y-6 rounded-3xl border p-8 backdrop-blur-sm">
+      {/* 半透明遮罩 */}
+      <div className="absolute inset-0 z-0 bg-black/40" />
+      <div className="border-border/20 bg-white/90 w-full max-w-md space-y-6 rounded-3xl border p-8 backdrop-blur-sm">
         <div className="text-center">
-          <h1 className="text-foreground font-serif text-3xl">DeerFlow</h1>
-          <p className="text-muted-foreground mt-2">使用 ADS 账号登录</p>
+          {/* <h1 className="text-foreground font-serif text-3xl">DeerFlow</h1> */}
+          <p className="text-black font-medium mt-2">ADS 账号登录</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-2">
           <div className="flex flex-col space-y-1">
-            <label htmlFor="username" className="text-sm font-medium">ADS 用户名</label>
+            <label htmlFor="username" className="text-black font-medium">ADS 用户名</label>
             <Input
-              id="username" type="text"
+              id="username" className="text-black font-medium border border-solid border-black" type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="输入 ADS 登录名" required
             />
           </div>
           <div className="flex flex-col space-y-1">
-            <label htmlFor="password" className="text-sm font-medium">密码</label>
+            <label htmlFor="password" className="text-black font-medium">密码</label>
             <Input
-              id="password" type="password"
+              id="password" className="text-black font-medium border border-solid border-black" type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="•••••••" required
             />
           </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full mt-4 bg-[#1890ff] hover:bg-[#1580e0] text-white" disabled={loading}>
             {loading ? "登录中..." : "登录"}
           </Button>
         </form>
