@@ -84,6 +84,7 @@ services:
       - ${DEER_FLOW_EXTENSIONS_CONFIG_PATH}:/app/backend/extensions_config.json:ro
       - ../skills:/app/skills:ro
       - ${DEER_FLOW_HOME}:/app/backend/.deer-flow
+      - ../deerflow_extensions:/app/deerflow_extensions
       # DooD: the host Docker socket is NOT mounted by default. It is added only
       # for aio (pure-DooD) sandbox mode via the opt-in docker-compose.dood.yaml
       # overlay (appended by scripts/deploy.sh). See backend/docs/CONFIGURATION.md
