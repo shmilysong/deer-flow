@@ -48,11 +48,8 @@ export interface ChannelSettingsResponse {
   channels: Record<string, ChannelInfo>;
 }
 
-export interface ChannelUpdateRequest {
+/** Input shape for saveChannel mutation (matches adapter contract). */
+export interface ChannelUpdateInput {
   channel: string;
-  credentials: Record<string, string>;
-}
-
-export interface ChannelVerifyRequest {
   credentials: Record<string, string>;
 }

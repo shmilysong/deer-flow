@@ -1,3 +1,11 @@
+/**
+ * @deprecated Channel metadata is now sourced from the upstream `/api/channels/*`
+ * endpoints via `adapters/channel-adapter.ts`. This file is kept as a reference
+ * for the four managed channel IDs and their mapping.
+ *
+ * Do NOT import `CHANNELS` or `getChannelMeta` in new code — use the adapter
+ * which provides credential fields dynamically from the server response.
+ */
 export interface CredentialField {
   key: string;
   label: string;

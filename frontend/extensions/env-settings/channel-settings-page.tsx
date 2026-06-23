@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/select";
 import { SettingsSection } from "@/components/workspace/settings/settings-section";
 
-import { CHANNELS } from "./channels";
 import {
   useChannelSettings,
   useDeleteChannel,
@@ -46,11 +45,16 @@ export function ChannelSettingsPage() {
   } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const selectedMeta = useMemo(
-    () => CHANNELS.find((c) => c.id === selectedChannelId)!,
-    [selectedChannelId],
-  );
   const channelInfo = settings?.channels?.[selectedChannelId];
+  const selectedCredentialFields = channelInfo?.credentialFields ?? [];
+  const channelNames = useMemo(
+    () =>
+      Object.values(settings?.channels ?? {}).map((c) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    [settings],
+  );
 
   const hasAnyValue = useMemo(
     () => Object.values(formValues).some((v) => v.trim()),
@@ -187,7 +191,7 @@ export function ChannelSettingsPage() {
                   <SelectValue placeholder="选择渠道" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CHANNELS.map((c) => (
+                  {channelNames.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
                     </SelectItem>
@@ -200,12 +204,12 @@ export function ChannelSettingsPage() {
             <div className="rounded-lg border p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">
-                  {selectedMeta.name}
+                  {channelInfo?.name ?? selectedChannelId}
                 </span>
                 {statusBadge}
               </div>
 
-              {selectedMeta.credentialFields.map((field) => (
+              {selectedCredentialFields.map((field) => (
                 <div key={field.key} className="space-y-2">
                   <label className="text-sm font-medium">{field.label}</label>
                   {channelInfo?.credentials?.[field.key] && (
@@ -336,7 +340,7 @@ export function ChannelSettingsPage() {
               </button>
             </div>
             <p className="text-muted-foreground text-sm mb-6">
-              确定清除 {selectedMeta.name} 的全部配置？操作不可撤销。
+              确定清除 {channelInfo?.name ?? selectedChannelId} 的全部配置？操作不可撤销。
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
