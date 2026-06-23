@@ -9,14 +9,6 @@ The script is idempotent — re-running it after a successful migration is a no-
 import argparse
 import logging
 import shutil
-    PYTHONPATH=. python scripts/migrate_user_isolation.py [--dry-run]
-
-The script is idempotent — re-running it after a successful migration is a no-op.
-"""
-
-import argparse
-import logging
-import shutil
 
 from deerflow.config.paths import Paths, get_paths
 
@@ -217,10 +209,6 @@ def main() -> None:
     report = migrate_thread_dirs(paths, owner_map, dry_run=args.dry_run)
     migrate_memory(paths, user_id=args.user_id, dry_run=args.dry_run)
     agent_report = migrate_agents(paths, user_id=args.user_id, dry_run=args.dry_run)
-
-    if report:
-        logger.info("Thread migration report:")
-    migrate_memory(paths, user_id="default", dry_run=args.dry_run)
 
     if report:
         logger.info("Thread migration report:")

@@ -29,7 +29,10 @@ import {
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import type { Subtask } from "@/core/tasks";
 import { useUpdateSubtask } from "@/core/tasks/context";
-import { parseSubtaskResult } from "@/core/tasks/subtask-result";
+import {
+  derivePendingSubtaskStatus,
+  parseSubtaskResult,
+} from "@/core/tasks/subtask-result";
 import type { AgentThreadState } from "@/core/threads";
 import { cn } from "@/lib/utils";
 
@@ -162,7 +165,6 @@ export function MessageList({
   thread,
   paddingBottom = MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   tokenUsageInlineMode = "off",
-  tokenUsageEnabled = false,
   hasMoreHistory,
   loadMoreHistory,
   isHistoryLoading,
@@ -172,7 +174,6 @@ export function MessageList({
   thread: BaseStream<AgentThreadState>;
   paddingBottom?: number;
   tokenUsageInlineMode?: TokenUsageInlineMode;
-  tokenUsageEnabled?: boolean;
   hasMoreHistory?: boolean;
   loadMoreHistory?: () => void;
   isHistoryLoading?: boolean;
@@ -182,6 +183,7 @@ export function MessageList({
   const updateSubtask = useUpdateSubtask();
   const messages = thread.messages;
   const groupedMessages = getMessageGroups(messages);
+  const lastGroupIndex = groupedMessages.length - 1;
   const turnUsageMessagesByGroupIndex =
     getAssistantTurnUsageMessages(groupedMessages);
   const tokenDebugSteps = useMemo(
@@ -277,6 +279,8 @@ export function MessageList({
         />
         {groupedMessages.map((group, groupIndex) => {
           const turnUsageMessages = turnUsageMessagesByGroupIndex[groupIndex];
+          const groupIsLoading =
+            thread.isLoading && groupIndex === lastGroupIndex;
 
           if (group.type === "human" || group.type === "assistant") {
             return (
@@ -361,12 +365,24 @@ export function MessageList({
               if (message.type === "ai") {
                 for (const toolCall of message.tool_calls ?? []) {
                   if (toolCall.name === "task") {
+                    const taskId = toolCall.id;
+                    if (!taskId) {
+                      continue;
+                    }
+                    const status = derivePendingSubtaskStatus(
+                      taskId,
+                      group.messages,
+                      groupIsLoading,
+                    );
                     const task: Subtask = {
-                      id: toolCall.id!,
+                      id: taskId,
                       subagent_type: toolCall.args.subagent_type,
                       description: toolCall.args.description,
                       prompt: toolCall.args.prompt,
-                      status: "in_progress",
+                      status,
+                      ...(status === "failed"
+                        ? { error: t.subtasks.failed }
+                        : {}),
                     };
                     updateSubtask(task);
                     tasks.add(task);
@@ -377,6 +393,7 @@ export function MessageList({
                 if (taskId) {
                   const parsed = parseSubtaskResult(
                     extractTextFromMessage(message),
+                    message.additional_kwargs,
                   );
                   updateSubtask({ id: taskId, ...parsed });
                 }
@@ -403,7 +420,7 @@ export function MessageList({
                   <MessageGroup
                     key={"thinking-group-" + message.id}
                     messages={[message]}
-                    isLoading={thread.isLoading}
+                    isLoading={groupIsLoading}
                     tokenDebugSteps={tokenDebugSteps.filter(
                       (step) => step.messageId === message.id,
                     )}
@@ -415,15 +432,15 @@ export function MessageList({
               } else if (message.id) {
                 subagentDebugMessageIds.push(message.id);
               }
-              const taskIds = message.tool_calls
-                ?.filter((toolCall) => toolCall.name === "task")
-                .map((toolCall) => toolCall.id);
+              const taskIds = message.tool_calls?.flatMap((toolCall) =>
+                toolCall.name === "task" && toolCall.id ? [toolCall.id] : [],
+              );
               for (const taskId of taskIds ?? []) {
                 results.push(
                   <SubtaskCard
                     key={"task-group-" + taskId}
-                    taskId={taskId!}
-                    isLoading={thread.isLoading}
+                    taskId={taskId}
+                    isLoading={groupIsLoading}
                   />,
                 );
               }

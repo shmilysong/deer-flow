@@ -10,7 +10,7 @@
 
 | 扩展 | 改动文件 | 风险 | 数量 |
 |------|---------|------|------|
-| **data_collection**（蒸馏数据采集） | `app.py` + `docker-compose*.yaml` + `entrypoint.sh` + `boot.py` | ✅ 低 | 4 个核心 + 1 个扩展 |
+| **data_collection**（蒸馏数据采集） | `app.py` + `docker-compose*.yaml` + `entrypoint.sh` + `boot.py` + `pyproject.toml` | ✅ 低 | 5 个核心 + 1 个扩展 |
 | **ads_auth**（ADS 统一认证） | `app.py` + `auth_middleware.py` + `csrf_middleware.py` + `deps.py` + `docker-compose-dev.yaml` + `next.config.js` + `middleware.ts` + `types.ts` + `.env.example` | ✅ 低 | 9 个核心 |
 | **settings-dialog-ext**（SettingsDialog 扩展架构 + ADS 账号适配） | `settings-dialog.tsx` + `registry.ts` + `workspace-nav-menu.tsx` + `app.py` + `account-settings-page.tsx` | ✅ 低 | 4 个前端 + 1 个后端 |
 | **input-suggestions**（输入建议按钮自定义） | `input-box.tsx`（2 行 import + 渲染改用动态注册）+ `registry.ts` + `config.ts` | ✅ 极低 | **1 个前端核心 + 2 个扩展** |
@@ -31,7 +31,7 @@
 | **前端** | [frontend.md](frontend.md) | A6, A7, A8, A10, A11, A12, S1, S2, S3, S4, S5, IS1, WS | `next.config.js`、`middleware.ts`、`types.ts`、`server.ts`、`workspace-content.tsx`、`query-client-provider.tsx`、`settings-dialog.tsx`、`registry.ts`、`workspace-nav-menu.tsx`、`account-settings-page.tsx`、`input-box.tsx`、`env-settings/` |
 | **Docker** | [docker.md](docker.md) | D2, D3, A4 | `docker-compose-dev.yaml`、`docker-compose.yaml` |
 | **脚本** | [scripts.md](scripts.md) | D4 | `entrypoint.sh` |
-| **配置** | [config.md](config.md) | A9 | `.env.example` |
+| **配置** | [config.md](config.md) | A9, D5 | `.env.example`、`pyproject.toml` |
 
 ---
 
@@ -198,6 +198,10 @@ grep -n "/channels" deerflow_extensions/env_settings/router.py
 
 echo "=== WS15: filelock 保护 ==="
 grep -n "filelock\|_get_env_lock" deerflow_extensions/env_settings/router.py
+
+echo "=== D5: pyproject.toml 依赖 ==="
+grep -c "filelock\|pyahocorasick" backend/pyproject.toml
+# 应输出 2
 ```
 
 如果某个 grep 返回空，说明补丁被覆盖了，需要重新打上。

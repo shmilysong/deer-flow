@@ -18,12 +18,6 @@ DeerFlow 应用在 `logs/` 目录中写入每个服务的日志：
 | `logs/gateway.log`   | API 请求/响应、Agent 运行时和 Gateway 错误 |
 | `logs/frontend.log`  | Next.js 服务器日志                     |
 | `logs/nginx.log`     | 代理访问和错误日志                     |
-| 文件 | 内容 |
-|---|---|
-| `logs/langgraph.log` | Agent 运行时、工具调用、LangGraph 错误 |
-| `logs/gateway.log`   | API 请求/响应、Gateway 错误            |
-| `logs/frontend.log`  | Next.js 服务器日志                     |
-| `logs/nginx.log`     | 代理访问和错误日志                     |
 
 **实时追踪日志**：
 
@@ -36,7 +30,6 @@ tail -f logs/gateway.log     # 查看 API 请求和 Agent 活动
 ```yaml
 # config.yaml
 log_level: debug # debug | info | warning | error
-log_level: debug  # debug | info | warning | error
 ```
 
 ## 健康检查

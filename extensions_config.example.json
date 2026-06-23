@@ -3,28 +3,6 @@
     "my_package.mcp.auth:build_auth_interceptor"
   ],
   "mcpServers": {
-    "ads": {
-      "enabled": true,
-      "type": "stdio",
-      "command": "node",
-      "args": ["/app/ads-mcp/dist/index.js"],
-      "env": {
-        "ADS_API_BASE_URL": "http://127.0.0.1:80"
-      },
-      "description": "ADS云桌面/广告派送系统/云桌面管理系统 - 支持终端列表查询、批量开关机、重启锁定、用户管理、镜像管理、策略管理、部门管理、VDI、虚拟桌面基础设施；常见别名：ads、ADS、云桌面、云桌面管理、终端管理、桌面虚拟化"
-    },
-    "filesystem": {
-      "enabled": false,
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/path/to/allowed/files"
-      ],
-      "env": {},
-      "description": "Provides filesystem access within allowed directories"
-    },
     "github": {
       "enabled": false,
       "type": "stdio",
@@ -49,19 +27,7 @@
       ],
       "env": {},
       "description": "PostgreSQL database access"
-    },
-    "deeprag": {
-      "enabled": true,
-      "type": "http",
-      "url": "http://127.0.0.1:86/mcp",
-      "description": "DeepRAG 知识库检索 - 支持文件检索、搜索、同步等功能"
     }
   },
-  "skills": {
-    "surprise-me": { "enabled": false },
-    "image-generation": { "enabled": false },
-    "podcast-generation": { "enabled": false },
-    "video-generation": { "enabled": false },
-    "claude-to-deerflow": { "enabled": false }
-  }
+  "skills": {}
 }

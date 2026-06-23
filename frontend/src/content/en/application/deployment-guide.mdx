@@ -29,15 +29,6 @@ Services started:
 
 Access the app at **http://localhost:2026**.
 
-| Service | Port | Description |
-|---|---|---|
-| LangGraph | 2024 | DeerFlow Harness runtime |
-| Gateway API | 8001 | FastAPI backend |
-| Frontend | 3000 | Next.js UI |
-| nginx | 2026 | Unified reverse proxy |
-
-Access the app at **http://localhost:2026**.
-
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash
@@ -58,10 +49,6 @@ Tail a log in real time:
 
 ```bash
 tail -f logs/gateway.log
-```
-
-```bash
-tail -f logs/langgraph.log
 ```
 
   </Tabs.Tab>
@@ -128,11 +115,6 @@ For production, use a named volume or a Persistent Volume Claim (PVC) instead of
 | `LocalSandboxProvider`                 | Single-user, trusted local workflows       |
 | `AioSandboxProvider` (Docker)          | Multi-user, moderate isolation requirement |
 | `AioSandboxProvider` + K8s Provisioner | Production, strong isolation, multi-user   |
-| Sandbox | Use case |
-|---|---|
-| `LocalSandboxProvider` | Single-user, trusted local workflows |
-| `AioSandboxProvider` (Docker) | Multi-user, moderate isolation requirement |
-| `AioSandboxProvider` + K8s Provisioner | Production, strong isolation, multi-user |
 
 For any deployment with more than one concurrent user, use a container-based sandbox to prevent users from interfering with each other's execution environments.
 
@@ -177,18 +159,6 @@ When `USERDATA_PVC_NAME` is set, the provisioner automatically uses subPath (`th
 
 ### nginx configuration
 
-nginx routes all traffic. Key environment variables that control routing:
-
-| Variable             | Default          | Description                             |
-| -------------------- | ---------------- | --------------------------------------- |
-| `LANGGRAPH_UPSTREAM` | `langgraph:2024` | LangGraph service address               |
-| `LANGGRAPH_REWRITE`  | `/`              | URL rewrite prefix for LangGraph routes |
-| Variable | Default | Description |
-|---|---|---|
-| `LANGGRAPH_UPSTREAM` | `langgraph:2024` | LangGraph service address |
-| `LANGGRAPH_REWRITE` | `/` | URL rewrite prefix for LangGraph routes |
-
-These are set in the Docker Compose environment and processed by `envsubst` at container startup.
 nginx routes all traffic to the frontend or Gateway. `/api/langgraph/*` is rewritten to Gateway's LangGraph-compatible `/api/*` routes, so no separate LangGraph upstream is required.
 
 ### Authentication
@@ -210,12 +180,6 @@ openssl rand -base64 32
 | Gateway + agent runtime         | 2 vCPU, 4 GB RAM | 4 vCPU, 8 GB RAM |
 | Frontend                        | 0.5 vCPU, 512 MB | 1 vCPU, 1 GB     |
 | Sandbox container (per session) | 1 vCPU, 1 GB     | 2 vCPU, 2 GB     |
-| Service | Minimum | Recommended |
-|---|---|---|
-| LangGraph (agent runtime) | 2 vCPU, 4 GB RAM | 4 vCPU, 8 GB RAM |
-| Gateway | 0.5 vCPU, 512 MB | 1 vCPU, 1 GB |
-| Frontend | 0.5 vCPU, 512 MB | 1 vCPU, 1 GB |
-| Sandbox container (per session) | 1 vCPU, 1 GB | 2 vCPU, 2 GB |
 
 ## Deployment verification
 
@@ -237,5 +201,4 @@ A working deployment returns a `200` response from each endpoint. The `/api/mode
     title="Operations & Troubleshooting"
     href="/docs/application/operations-and-troubleshooting"
   />
-  <Cards.Card title="Operations & Troubleshooting" href="/docs/application/operations-and-troubleshooting" />
 </Cards>

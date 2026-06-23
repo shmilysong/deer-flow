@@ -21,8 +21,9 @@ from pydantic import BaseModel, Field
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_checkpointer, get_current_user, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge
+from app.gateway.pagination import trim_run_message_page
 from app.gateway.services import sse_consumer, start_run, wait_for_run_completion
-from deerflow.runtime import RunRecord, RunStatus, serialize_channel_values
+from deerflow.runtime import RunRecord, RunStatus, serialize_channel_values_for_api
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/threads", tags=["runs"])
@@ -78,7 +79,10 @@ class RunResponse(BaseModel):
 
 class ThreadTokenUsageModelBreakdown(BaseModel):
     tokens: int = 0
-    runs: int = 0
+    runs: int = Field(
+        default=0,
+        description="Number of runs in which this model appeared; counts are non-exclusive for runs that used multiple models.",
+    )
 
 
 class ThreadTokenUsageCallerBreakdown(BaseModel):
@@ -191,7 +195,7 @@ async def wait_run(thread_id: str, body: RunCreateRequest, request: Request) -> 
             if checkpoint_tuple is not None:
                 checkpoint = getattr(checkpoint_tuple, "checkpoint", {}) or {}
                 channel_values = checkpoint.get("channel_values", {})
-                return serialize_channel_values(channel_values)
+                return serialize_channel_values_for_api(channel_values)
         except Exception:
             logger.exception("Failed to fetch final state for run %s", record.run_id)
 
@@ -402,8 +406,7 @@ async def list_run_messages(
         before_seq=before_seq,
         after_seq=after_seq,
     )
-    has_more = len(rows) > limit
-    data = rows[:limit] if has_more else rows
+    data, has_more = trim_run_message_page(rows, limit=limit, after_seq=after_seq)
     return {"data": data, "has_more": has_more}
 
 

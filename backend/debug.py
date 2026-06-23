@@ -19,16 +19,6 @@ import asyncio
 import logging
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
-from langgraph.runtime import Runtime
-
-try:
-    from prompt_toolkit import PromptSession
-    from prompt_toolkit.history import InMemoryHistory
-
-    _HAS_PROMPT_TOOLKIT = True
-except ImportError:
-    _HAS_PROMPT_TOOLKIT = False
 
 try:
     from prompt_toolkit import PromptSession
@@ -58,33 +48,11 @@ def _setup_logging(log_level: int = logging.INFO) -> None:
     here, so the eventual contents of ``debug.log`` may not be filtered solely by
     this function's ``log_level`` argument.
     """
-def _logging_level_from_config(name: str) -> int:
-    """Map ``config.yaml`` ``log_level`` string to a ``logging`` level constant."""
-    mapping = logging.getLevelNamesMapping()
-    return mapping.get((name or "info").strip().upper(), logging.INFO)
-
-    This configures the root logger and the ``debug.log`` file handler so logs do
-    not print on the interactive console. It is idempotent: any pre-existing
-    handlers on the root logger (e.g. installed by ``logging.basicConfig`` in
-    transitively imported modules) are removed so the debug session output only
-    lands in ``debug.log``.
-
-    Note: later config-driven logging adjustments may change named logger
-    verbosity without raising the root logger or file-handler thresholds set
-    here, so the eventual contents of ``debug.log`` may not be filtered solely by
-    this function's ``log_level`` argument.
-    """
     root = logging.root
     for h in list(root.handlers):
         root.removeHandler(h)
         h.close()
     root.setLevel(log_level)
-
-    file_handler = logging.FileHandler("debug.log", mode="a", encoding="utf-8")
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(logging.Formatter(_LOG_FMT, datefmt=_LOG_DATEFMT))
-    root.addHandler(file_handler)
-    root.setLevel(level)
 
     file_handler = logging.FileHandler("debug.log", mode="a", encoding="utf-8")
     file_handler.setLevel(log_level)
@@ -96,13 +64,6 @@ async def main():
     # Install file logging first so warnings emitted while loading config do not
     # leak onto the interactive terminal via Python's lastResort handler.
     _setup_logging()
-
-    from deerflow.config import get_app_config
-    from deerflow.config.app_config import apply_logging_level
-
-    app_config = get_app_config()
-    apply_logging_level(app_config.log_level)
-    _setup_logging("info")
 
     from deerflow.config import get_app_config
     from deerflow.config.app_config import apply_logging_level
