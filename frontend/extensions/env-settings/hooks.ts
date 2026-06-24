@@ -5,12 +5,17 @@ import {
   updateProviderSetting,
   deleteProviderSetting,
   verifyProviderKey,
-  loadChannelSettings,
-  updateChannel,
+} from "./api";
+import {
+  listChannels,
+  saveChannel,
   deleteChannel,
   verifyChannel,
-} from "./api";
-import type { ProviderSettingsUpdateRequest, ChannelUpdateRequest } from "./types";
+} from "./adapters/channel-adapter";
+import type { ProviderSettingsUpdateRequest, ChannelUpdateInput } from "./types";
+
+export const channelProviderQueryKey = ["channelProviders"] as const;
+export const channelConnectionsQueryKey = ["channelConnections"] as const;
 
 export function useProviderSettings() {
   const { data, isLoading, error } = useQuery({
@@ -49,8 +54,8 @@ export function useVerifyProviderKey() {
 
 export function useChannelSettings() {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["channelSettings"],
-    queryFn: () => loadChannelSettings(),
+    queryKey: [...channelProviderQueryKey, ...channelConnectionsQueryKey],
+    queryFn: () => listChannels(),
   });
   return { settings: data, isLoading, error };
 }
@@ -58,9 +63,10 @@ export function useChannelSettings() {
 export function useUpdateChannel() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: ChannelUpdateRequest) => updateChannel(data),
+    mutationFn: (data: ChannelUpdateInput) => saveChannel(data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["channelSettings"] });
+      void queryClient.invalidateQueries({ queryKey: channelProviderQueryKey });
+      void queryClient.invalidateQueries({ queryKey: channelConnectionsQueryKey });
     },
   });
 }
@@ -70,7 +76,8 @@ export function useDeleteChannel() {
   return useMutation({
     mutationFn: (channel: string) => deleteChannel(channel),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["channelSettings"] });
+      void queryClient.invalidateQueries({ queryKey: channelProviderQueryKey });
+      void queryClient.invalidateQueries({ queryKey: channelConnectionsQueryKey });
     },
   });
 }

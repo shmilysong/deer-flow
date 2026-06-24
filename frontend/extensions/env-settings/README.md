@@ -6,20 +6,22 @@
 
 **AI 模型 API Key 管理** — 支持 7 家主流 AI 厂商（DeepSeek、Kimi、Doubao、Qwen、MiniMax、GLM、硅基流动）的 API Key 图形化管理。通过 SettingsDialog 扩展注册为"API Keys"配置页，用户可在设置面板中完成 Key 的配置、验证和管理。
 
-**IM 渠道凭据管理** — 支持 4 个国内 IM 渠道（企业微信 WeCom / 飞书 Feishu / 钉钉 DingTalk / 个人微信 WeChat）的可视化凭据配置，通过 SettingsDialog 扩展注册为"渠道配置"标签页。前端根据 channels.ts 元数据动态渲染凭据输入表单，配置后自动热重启渠道，支持凭据验证、清除等操作。
+**IM 渠道凭据管理** — 支持 4 个国内 IM 渠道（企业微信 WeCom / 飞书 Feishu / 钉钉 DingTalk / 个人微信 WeChat）的可视化凭据配置，通过 SettingsDialog 扩展注册为"渠道配置"标签页。渠道凭据通过上游 `/api/channels/*` 接口管理（`adapters/channel-adapter.ts` 适配层），凭据持久化到 `runtime-config.json`，配置后自动热重启渠道，支持凭据验证、清除等操作。
 
-后端 API 分路径设计：`/api/env-settings/providers/*` 处理厂商配置，`/api/env-settings/channels/*` 处理渠道配置。
+后端 API 路径：`/api/env-settings/providers/*` 处理厂商配置，渠道配置使用上游 `/api/channels/*`。
 
 ## 目录结构
 
 ```
 env-settings/
-├── api.ts                   # REST API 封装
+├── adapters/                 # 适配层（连接上游 `/api/channels/*` API）
+│   └── channel-adapter.ts   # 渠道 API 适配器（Adapter Pattern）
+├── api.ts                   # REST API 封装（厂商配置）
 ├── provider-settings-page.tsx    # 厂商配置 UI 组件
 ├── channel-settings-page.tsx     # 渠道配置 UI 组件
 ├── extension.ts             # 注册到 SettingsDialog 扩展系统
 ├── hooks.ts                 # TanStack Query hooks
-├── channels.ts              # 4 个国内 IM 渠道元数据定义
+├── channels.ts              # @deprecated 渠道元数据（已由适配器替代）
 ├── providers.ts             # 7 家 AI 厂商元数据定义
 └── types.ts                 # TypeScript 类型定义
 ```
@@ -34,10 +36,10 @@ env-settings/
 - `EnvSettingsResponse` — 后端返回的厂商配置数据（`providers` 映射表）
 - `EnvSettingsUpdateRequest` — 保存 Key 的请求参数（provider、api_key、base_url、model）
 - `EnvSettingsUpdateResponse` / `VerifyResponse` / `DeleteResponse` — 各操作响应
-- `ChannelInfo` — 渠道信息（ID、名称、运行状态、凭据字典）
-- `ChannelSettingsResponse` — 后端返回的渠道配置数据（`channels` 映射表）
-- `ChannelUpdateRequest` — 保存渠道凭据的请求参数（channel、通用 `credentials` 字典）
-- `ChannelVerifyRequest` — 验证请求参数（通用 `credentials` 字典）
+- `ChannelInfo` — 渠道信息（ID、名称、运行状态、凭据字典、凭据字段定义）
+- `ChannelUpdateInput` — 保存渠道凭据的请求参数（channel、通用 `credentials` 字典）
+
+> 渠道配置类型定义由 `adapters/channel-adapter.ts` 中的 `AdaptedChannelInfo` 驱动，从上游 `ChannelProvider` 类型映射而来。
 
 ### providers.ts
 
@@ -75,7 +77,7 @@ export interface ChannelMeta {
 }
 ```
 
-通过 `getChannelMeta(id)` 查找指定渠道的元数据。`ChannelSettingsPage` 组件根据 `selectedMeta.credentialFields` 动态遍历渲染输入框，新增渠道只需在 `CHANNELS` 数组中添加条目即可，无需改动 UI 组件。
+通过 `getChannelMeta(id)` 查找指定渠道的元数据。渠道配置 UI 现在从 `adapters/channel-adapter.ts` 获取凭据字段定义（从上游 `credential_fields` 动态映射），而非 `channels.ts`。
 
 ### api.ts
 
@@ -87,13 +89,13 @@ export interface ChannelMeta {
 - `deleteProviderSetting(provider)` — DELETE `/api/env-settings/providers/:provider`，清除指定厂商配置
 - `verifyProviderKey(provider, apiKey, baseUrl)` — POST `/api/env-settings/providers/:provider/verify`，验证 API Key 连通性
 
-**渠道配置**（路径 `/api/env-settings/channels`）：
-- `loadChannelSettings()` — GET `/api/env-settings/channels`，加载渠道配置状态
-- `updateChannel(data)` — PUT `/api/env-settings/channels`，保存渠道凭据
-- `deleteChannel(channel)` — DELETE `/api/env-settings/channels/:channel`，清除渠道配置
-- `verifyChannel(channel, credentials)` — POST `/api/env-settings/channels/:channel/verify`，验证渠道连通性
+**渠道配置**（已迁移至上游 `/api/channels/*`，通过 `adapters/channel-adapter.ts` 适配层调用）：
+- `listChannels()` — GET `/api/channels/providers` + `/api/channels/connections`，加载渠道配置状态
+- `saveChannel(data)` — POST `/api/channels/:provider/runtime-config`，保存渠道凭据
+- `deleteChannel(channel)` — DELETE `/api/channels/:provider/runtime-config`，清除渠道配置
+- `verifyChannel(channel, credentials?)` — 无独立端点，临时保存后验证再回滚
 
-后端路由和数据操作在 `deerflow_extensions/env_settings/router.py` 中实现，前端零侵入。
+渠道数据通过 adapter 适配层映射，保持与原有 UI 兼容。上游后端由 `backend/app/gateway/routers/channel_connections.py` 提供。
 
 ### hooks.ts
 
@@ -105,10 +107,10 @@ export interface ChannelMeta {
 - `useDeleteProviderSetting()` — 清除 Key 的 mutation，成功后自动刷新配置列表
 - `useVerifyProviderKey()` — 验证 Key 连通性的 mutation
 
-**渠道配置**（queryKey: `["channelSettings"]`）：
+**渠道配置**（queryKey: 共享上游 `["channelProviders"]` + `["channelConnections"]`，通过 `adapters/channel-adapter.ts` 调用）：
 - `useChannelSettings()` — 查询渠道配置数据，返回 `{ settings, isLoading, error }`
-- `useUpdateChannel()` — 保存渠道凭据的 mutation，成功后自动刷新渠道列表
-- `useDeleteChannel()` — 清除渠道凭据的 mutation，成功后自动刷新渠道列表
+- `useUpdateChannel()` — 保存渠道凭据的 mutation，成功后自动刷新上游缓存
+- `useDeleteChannel()` — 清除渠道凭据的 mutation，成功后自动刷新上游缓存
 - `useVerifyChannel()` — 验证渠道连通性的 mutation
 
 ### provider-settings-page.tsx — ProviderSettingsPage

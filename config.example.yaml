@@ -1102,7 +1102,7 @@ memory:
 # Controls whether the HTTP gateway exposes custom-agent SOUL/USER.md management.
 # Keep this disabled unless the gateway is behind a trusted authenticated admin boundary.
 agents_api:
-  enabled: false
+  enabled: true
 
 # ============================================================================
 # Skill Self-Evolution Configuration
@@ -1216,33 +1216,11 @@ run_events:
 # - Slack, Discord, Feishu, DingTalk, WeChat, and WeCom use `/connect <code>`
 #   through the already-running bot/app.
 #
-# channel_connections:
-#   enabled: false
-#   # Security: keep this enabled unless you intentionally want legacy open-bot behavior.
-#   # Disabling it lets unbound external IM users create DeerFlow threads/runs.
-#   require_bound_identity: true
-#
-#   telegram:
-#     enabled: false
-#     bot_username: $TELEGRAM_BOT_USERNAME
-#
-#   slack:
-#     enabled: false
-#
-#   discord:
-#     enabled: false
-#
-#   feishu:
-#     enabled: false
-#
-#   dingtalk:
-#     enabled: false
-#
-#   wechat:
-#     enabled: false
-#
-#   wecom:
-#     enabled: false
+channel_connections:
+  enabled: true
+  # Security: keep this enabled unless you intentionally want legacy open-bot behavior.
+  # Disabling it lets unbound external IM users create DeerFlow threads/runs.
+  require_bound_identity: true
 
 # ============================================================================
 # IM Channels Configuration
